@@ -55,7 +55,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=fennomix_novo --cov-report=term-missing"
+addopts = "-v --cov=src/fennomix_novo --cov-report=term-missing"
 
 [tool.mypy]
 python_version = "3.8"
