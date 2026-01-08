@@ -1,0 +1,12 @@
+1. 非自回归
+2. hdf dataset
+3. 动态规划top10
+4. pglyco score
+5. weight sample+weight loss
+6. 去掉mass，但未去掉多余modificartion
+
+new to do：
+1. 去同位素峰，基于fennomix.base
+2. 加入helix novo 特点
+3. mask谱峰，并动态mask
+4. 引入图神经网络	
