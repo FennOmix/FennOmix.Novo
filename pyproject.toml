@@ -23,13 +23,9 @@ dependencies = [
     "numpy",
     "pandas",
     "tqdm",
-    "numba",
-    "torch",
-    "einops",
     "h5py",
     "pyteomics",
-    "alphabase",
-    "spectrum_utils"
+    # Note: heavy ML/perf packages moved to optional extras below to keep CI installs small
 ]
 
 [project.optional-dependencies]
@@ -42,6 +38,27 @@ dev = [
     "mypy>=1.0",
     "ruff>=0.3.0",
     "pre-commit>=3.0",
+]
+ml = [
+    "torch",
+    "einops",
+    "numba",
+    "spectrum_utils",
+    "alphabase",
+]
+
+ml-cpu = [
+    "torch==2.9.1+cpu",
+    "einops",
+    "numba",
+    "spectrum_utils",
+    "alphabase",
+]
+
+tests = [
+    # Minimal testing extras for CI
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
 ]
 
 [project.urls]
