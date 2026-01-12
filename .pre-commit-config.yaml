@@ -9,7 +9,7 @@ repos:
     hooks:
       # Run the linter
       - id: ruff
-        args: [--fix]
+        args: [--fix, --extend-exclude=src/fennomix_novo/depthcharge/**]
       # Run the formatter
       - id: ruff-format
 
