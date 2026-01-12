@@ -20,7 +20,21 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "tqdm",
+    "numba",
+    "torch",
+    "einops",
+    "h5py",
+    "pyteomics",
+    "peptdeep",
+    "alphabase",
+    "alpharaw",
+    "neptune-client",
     "spectrum_utils",
+    "tensorboard",
 ]
 
 [project.optional-dependencies]
