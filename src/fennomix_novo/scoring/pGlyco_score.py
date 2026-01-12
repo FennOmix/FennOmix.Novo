@@ -8,6 +8,8 @@ from alphabase.peptide.fragment import create_fragment_mz_dataframe
 from alphabase.peptide.precursor import refine_precursor_df
 from peptdeep.mass_spec.match import match_one_raw_with_numba
 
+"""version：20251206"""
+
 
 # 1. 定义Numba加速的核心评分函数（将最耗时的循环用Numba编译）
 @nb.jit(nopython=True, parallel=True)
@@ -210,7 +212,7 @@ class DenovoSequenceScoring:
                     "ms_level",
                 ]
             ]  # 此处为ms.data 可能也会是raw.data
-        except:
+        except Exception:
             self.spectra_df = f.psm.psm_df.values[
                 ["charge", "peak_start_idx", "peak_stop_idx", "precursor_mz", "spec_idx"]
             ]
@@ -263,7 +265,7 @@ class DenovoSequenceScoring:
         self.WATER_MW = 18.01056  # 加水分子量
         # 预处理：按氨基酸缩写长度降序排序（关键：优先匹配长缩写）
         self.sorted_aas = sorted(self.aa2mass.keys(), key=len, reverse=True)
-        self.max_aa_len = max(len(aa) for aa in self.aa2mass.keys())  # 最长氨基酸缩写长度
+        self.max_aa_len = max(len(aa) for aa in self.aa2mass)  # 最长氨基酸缩写长度
         "-------------肽段分子量计算------------"
         self.mass2mod = {}
         for mod, mass_str in self.mode2mass.items():

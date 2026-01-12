@@ -9,6 +9,7 @@ from .encoders import FloatEncoder, PeakEncoder, PositionalEncoder
 """Base Transformer models for working with mass spectra and peptides"""
 """添加了peaks_tokenizer，heix编码"""
 
+
 class SpectrumEncoder(torch.nn.Module):
     """A Transformer encoder for input mass spectra.
 

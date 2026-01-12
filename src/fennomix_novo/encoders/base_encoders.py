@@ -8,6 +8,7 @@ import torch
 
 """Simple encoders for input into Transformers and the like."""
 
+
 class FloatEncoder(torch.nn.Module):
     """Encode floating point values using sine and cosine waves.
 

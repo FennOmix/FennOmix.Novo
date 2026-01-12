@@ -17,7 +17,7 @@ from tqdm import tqdm
 from fennomix_novo.data_set import hdf_dataloader
 from fennomix_novo.decoders import DPDecoderTail, PeptideDecoderHead
 from fennomix_novo.encoders import SpectrumEncoder
-from fennomix_novo.scoring import pGlyco_scoring_1206
+from fennomix_novo.scoring import pGlyco_score
 
 
 def get_default_device():
@@ -246,9 +246,7 @@ class WeightedCrossEntropyLoss(nn.Module):
         self.train_label_smoothing = train_label_smoothing
         self.use_score_weight = use_score_weight
         if self.use_score_weight and (score_mean is None or score_std is None):
-            raise ValueError(
-                "use_score_weight=True 时必须提供 score_mean 和 score_std（全局统计）"
-            )
+            raise ValueError("use_score_weight=True 时必须提供 score_mean 和 score_std（全局统计）")
         self.score_mean = float(score_mean) if score_mean is not None else None
         self.score_std = float(score_std) if score_std is not None else None
         self.weight_min = float(weight_min)
@@ -692,9 +690,7 @@ class ModelRunner:
 
                     spec_idx_2d = spec_idx.reshape(-1, 1)  # 形状 (1024, 1)
                     np.apply_along_axis(
-                        lambda x: ",".join(
-                            [f"{value:.2f}" for value in x]
-                        ),
+                        lambda x: ",".join([f"{value:.2f}" for value in x]),
                         axis=2,
                         arr=batch_ori_logits.cpu().numpy(),  # 先将张量转换为 NumPy 数组
                     )  # 不保留logits
@@ -720,7 +716,7 @@ class ModelRunner:
                 ]
                 df = pd.DataFrame(all_merged, columns=columns)
                 "在这里打分: input： df， test_file_path: hdf"
-                scored_df, filtered_df = pGlyco_scoring_1206.score_sequence(df, test_file_path)
+                scored_df, filtered_df = pGlyco_score.score_sequence(df, test_file_path)
                 output_csv_path = out_put_folder + "/" + test_file_path.stem + "ori.csv"
                 df.to_csv(output_csv_path, index=False)
                 scored_df.to_csv(scored_df_csv_path, index=False)

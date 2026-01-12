@@ -1,4 +1,3 @@
-
 import re
 
 import torch
@@ -9,6 +8,7 @@ from .encoders import FloatEncoder, PeakEncoder, PositionalEncoder
 
 """Base Transformer models for working with mass spectra and peptides"""
 """casanovo 原代码"""
+
 
 class SpectrumEncoder(torch.nn.Module):
     """A Transformer encoder for input mass spectra.
