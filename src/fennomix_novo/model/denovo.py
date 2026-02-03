@@ -831,7 +831,6 @@ class ModelRunner:
         for test_file_path in test_files:
             "需要删除"
             scored_df_csv_path = out_put_folder + "/" + test_file_path.stem + "with_score.csv"
-            scored_filtered_df_csv_path = out_put_folder + "/" + test_file_path.stem + "result.csv"
             file_path = Path(scored_df_csv_path)
             if file_path.exists():
                 continue
@@ -887,11 +886,8 @@ class ModelRunner:
                 ]
                 df = pd.DataFrame(all_merged, columns=columns)
                 "在这里打分: input： df， test_file_path: hdf"
-                scored_df, filtered_df = pGlyco_score.score_sequence(df, test_file_path)
-                output_csv_path = out_put_folder + "/" + test_file_path.stem + "ori.csv"
-                df.to_csv(output_csv_path, index=False)
+                scored_df, _ = pGlyco_score.score_sequence(df, test_file_path)
                 scored_df.to_csv(scored_df_csv_path, index=False)
-                filtered_df.to_csv(scored_filtered_df_csv_path, index=False)
 
     def initialize_model(self, mode=None):
         self.model = Spec2pep(

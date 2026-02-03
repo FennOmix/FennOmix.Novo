@@ -65,8 +65,13 @@ class DPDecoderTail(DecoderTail):
         self._aa2idx = {aa: i for i, aa in self._idx2aa.items()}
         self.stop_token = self._aa2idx["$"]
 
-    def join_no_stop_token(self, x):
-        return "".join([aa for aa in x if aa != "$"])
+    def join_no_stoptoken(self, x):
+        result = []
+        for aa in x:
+            if aa == "$":
+                break
+            result.append(aa)
+        return "".join(result)
 
     def translate_top_k_seqs(self, batch_top_k_seqs: np.ndarray) -> np.ndarray:
         """将索引序列转换为氨基酸序列"""
