@@ -9,4 +9,4 @@ new to do：
 1. 去同位素峰，基于fennomix.base
 2. 加入helix novo 特点
 3. mask谱峰，并动态mask
-4. 引入图神经网络	
+4. 引入图神经网络
