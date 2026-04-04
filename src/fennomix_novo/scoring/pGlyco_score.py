@@ -1,4 +1,5 @@
 import re
+import warnings
 
 import numba as nb
 import numpy as np
@@ -8,10 +9,9 @@ from alphabase.peptide.fragment import create_fragment_mz_dataframe
 from alphabase.peptide.precursor import refine_precursor_df
 from peptdeep.mass_spec.match import match_one_raw_with_numba
 
-"""version：20251206"""
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
-# 1. 定义Numba加速的核心评分函数（将最耗时的循环用Numba编译）
 @nb.jit(nopython=True, parallel=True)
 def calculate_score_numba(
     matched_intensities,  # 全量碎片匹配强度 (total_frags, n_frag_types)
@@ -163,36 +163,20 @@ def filter_mass_match(
     返回值：
         pd.DataFrame: 仅保留质量匹配（mass_match=True）的行，包含原始列和新增的mass_match列
     """
-    # 深拷贝避免修改原始数据
     df_copy = df.copy(deep=True)
-
-    # 校验必要列是否存在
     required_cols = [sequence_mass_col, precursor_mass_col]
     missing_cols = [col for col in required_cols if col not in df_copy.columns]
     if missing_cols:
         raise ValueError(f"DataFrame缺少必要列：{', '.join(missing_cols)}")
-
-    # 校验质量列是否为数值类型
     for col in required_cols:
         if not pd.api.types.is_numeric_dtype(df_copy[col]):
             raise TypeError(f"{col}列必须是数值类型（int/float），当前类型：{df_copy[col].dtype}")
-
-    # 生成偏移量（-mass_tol 到 +mass_tol 的整数，含两端）
     offsets = np.arange(-mass_tol, mass_tol + 1)
-
-    # 向量化计算（高效处理大数据量）
-    # 生成 (行数 × 偏移量个数) 的母离子质量偏移矩阵
-    precursor_masses = df_copy[precursor_mass_col].values[:, None]  # 转换为列向量
+    precursor_masses = df_copy[precursor_mass_col].values[:, None]
     shifted_masses = precursor_masses + offsets
-
-    # 计算ppm误差矩阵：|偏移后质量 - 序列质量| / 序列质量 × 1e6
-    sequence_masses = df_copy[sequence_mass_col].values[:, None]  # 转换为列向量
+    sequence_masses = df_copy[sequence_mass_col].values[:, None]
     ppm_errors = np.abs(shifted_masses - sequence_masses) / sequence_masses * 1e6
-
-    # 标记每行是否有任意一个偏移满足ppm误差要求
     df_copy["mass_match"] = (ppm_errors <= mass_error).any(axis=1)
-
-    # 保留匹配成功的行，重置索引
     result_df = df_copy[df_copy["mass_match"]].reset_index(drop=True)
 
     return result_df
@@ -204,29 +188,24 @@ class DenovoSequenceScoring:
         try:
             self.spectra_df = f.ms_data.spectrum_df.values[
                 [
-                    "charge",
+                    "precursor_charge",
                     "peak_start_idx",
                     "peak_stop_idx",
                     "precursor_mz",
                     "spec_idx",
                     "ms_level",
                 ]
-            ]  # 此处为ms.data 可能也会是raw.data
-        except Exception:
+            ]
+            self.spectra_df["charge"] = self.spectra_df["precursor_charge"]
+        except:  # noqa: E722
             self.spectra_df = f.psm.psm_df.values[
                 ["charge", "peak_start_idx", "peak_stop_idx", "precursor_mz", "spec_idx"]
             ]
+
         self.peak_df = f.ms_data.peak_df.values
         self.mode2mass = {
             "Carbamidomethyl@C": "C+57.021",
             "Oxidation@M": "M+15.995",
-            "Deamidated@N": "N+0.984",
-            "Deamidated@Q": "Q+0.984",
-            "Acetyl@Protein_N-term": "+42.011",
-            "AEBS@Y": "Y+183.035",
-            "AEBS@K": "K+183.035",
-            "Glu->pyro-Glu@E^Any_N-term": "-18.011",  # before nterm E
-            "Gln->pyro-Glu@Q^Any_N-term": "-17.027",  # before nterm Q
             "Cysteinyl@C": "C+119.004",
         }
         "-------------肽段分子量计算------------"
@@ -253,35 +232,25 @@ class DenovoSequenceScoring:
             "Y": 163.063329,
             "W": 186.079313,
             "M+15.995": 147.035400,
-            "N+0.984": 115.026943,
-            "Q+0.984": 129.042594,
-            "+42.011": 42.010565,
-            "Y+183.035": 346.099,
-            "K+183.035": 311.130,
-            "-18.011": -18.011,
-            "-17.027": -17.027,
             "C+119.004": 222.014,
         }
-        self.WATER_MW = 18.01056  # 加水分子量
-        # 预处理：按氨基酸缩写长度降序排序（关键：优先匹配长缩写）
+        self.WATER_MW = 18.01056
         self.sorted_aas = sorted(self.aa2mass.keys(), key=len, reverse=True)
-        self.max_aa_len = max(len(aa) for aa in self.aa2mass)  # 最长氨基酸缩写长度
+        self.max_aa_len = max(len(aa) for aa in self.aa2mass)
         "-------------肽段分子量计算------------"
         self.mass2mod = {}
         for mod, mass_str in self.mode2mass.items():
             for mass in re.findall(r"[+-]\d+\.\d+", mass_str):
                 self.mass2mod[mass] = mod
         self.top_k = sequences_df.shape[1] - 1  # -1: spec_idx
-        self.sequences_df = pd.melt(
-            sequences_df,
-            id_vars=["spec_idx"],
-            value_vars=sequences_df.columns.tolist()[1:],  # 取seq1到seq10 [1:] > 1
-            var_name="sequence_rank",
-            value_name="modified_sequence",
+        self.sequences_df = sequences_df
+        self.sequences_df["modified_sequence"] = self.sequences_df["modified_sequence"].replace(
+            "", np.nan
         )
-        self.sequences_df["top"] = (
-            self.sequences_df["sequence_rank"].str.extract(r"(\d+)").astype(int)
-        )  # 用于记录模型原始输出排名
+        self.sequences_df = self.sequences_df.dropna(subset=["modified_sequence"]).reset_index(
+            drop=True
+        )
+
         self.parse_modified_sequences()  # 拆分修饰序列为sequence、mod、mod_site
         self.mass_tol = 2
         self.ppm = 20.0
@@ -301,29 +270,23 @@ class DenovoSequenceScoring:
             max_check_len = min(self.max_aa_len, peptide_len - pos)
 
             for check_len in range(max_check_len, 0, -1):
-                # 截取子串尝试匹配氨基酸
                 aa_candidate = peptide[pos : pos + check_len]
                 if aa_candidate in self.aa2mass:
-                    # 匹配成功，累加分子量
                     total_mass += self.aa2mass[aa_candidate]
                     pos += check_len  # 跳过已匹配的字符
                     matched = True
                     break
 
             if not matched:
-                # 无匹配的氨基酸（可根据需求修改：抛错/忽略/设为0）
                 raise ValueError(
                     f"肽段 '{peptide}' 中存在未定义的氨基酸：{peptide[pos:pos + 3]}..."
                 )
-
-        # 加水电分子量，返回结果
         return total_mass + self.WATER_MW
 
     def add_mw_to_df(
         self, df: pd.DataFrame, peptide_col: str = "肽段序列", mw_col: str = "肽段分子量"
     ):
-        """给DataFrame添加分子量列（核心调用方法）"""
-        # 批量计算（pandas.apply已优化，百万行足够快）
+        """给DataFrame添加分子量列"""
         df[mw_col] = df[peptide_col].apply(self.calculate_peptide_mw).round(2).astype(np.float64)
         return df
 
@@ -352,20 +315,17 @@ class DenovoSequenceScoring:
             添加了三列的DataFrame: pure_sequence, mod_types, mod_positions
         """
 
-        # 解析单个序列的内部函数
         def parse_seq(seq):
             pure = []
             mods = []
             positions = []
             i = 0
             while i < len(seq):
-                # 查找质量修饰(如+15.995)
                 match = re.match(r"^([+-]\d+\.\d+)", seq[i:])
                 if match:
                     mass = match.group(1)
-                    # 记录修饰信息(位置从1开始)
                     mods.append(self.mass2mod.get(mass, f"Unknown{mass}"))
-                    positions.append(str(len(pure)))  # 当前纯序列长度即修饰位置
+                    positions.append(str(len(pure)))
                     i += len(mass)
                 else:
                     pure.append(seq[i])
@@ -378,21 +338,16 @@ class DenovoSequenceScoring:
         )
 
     def sequence_spectra_match(self):
+        self.sequences_df["spec_idx"] = self.sequences_df["spec_idx"].astype(str)
+        self.spectra_df["spec_idx"] = self.spectra_df["spec_idx"].astype(str)
         self.sequences_df = pd.merge(
             self.sequences_df,
             self.spectra_df[
-                [
-                    "charge",
-                    "peak_start_idx",
-                    "peak_stop_idx",
-                    "precursor_mz",
-                    "spec_idx",
-                    "ms_level",
-                ]
+                ["charge", "peak_start_idx", "peak_stop_idx", "precursor_mz", "spec_idx"]
             ],
             on="spec_idx",
             how="inner",
-        )  # 已核对：spec_idx与原始数据peak_start_stop一致
+        )
         psm_df = refine_precursor_df(self.sequences_df)
         psm_df["row_idx"] = range(len(psm_df))  # 该函数中，peak_start_idx和df的行索引匹配
         charged_frag_types = ["b_z1", "y_z1", "b_z2", "y_z2"]
@@ -400,8 +355,6 @@ class DenovoSequenceScoring:
             psm_df, charged_frag_types
         )  # 已核对：随便计算无误
         self.fragment_mz_df = fragment_mz_df
-        # ========== 关键修改: 显式类型转换 ==========
-        # 确保所有数组都是正确的数值类型
         psm_df["spec_idx"] = psm_df["spec_idx"].astype(np.int64)
         psm_df["frag_start_idx"] = psm_df["frag_start_idx"].astype(np.int64)
         psm_df["frag_stop_idx"] = psm_df["frag_stop_idx"].astype(np.int64)
@@ -411,22 +364,15 @@ class DenovoSequenceScoring:
         psm_df = self.calculate_precursor_mass(
             psm_df, precursor_mz_col="precursor_mz", charge_col="charge"
         )
-        # 提取并转换谱图数据数组
         all_spec_mzs = self.peak_df["mz"].values.astype(np.float64)
         all_spec_intensities = self.peak_df["intensity"].values.astype(np.float64)
-
-        # 提取并转换索引数组
         peak_start_idxes = self.sequences_df["peak_start_idx"].values.astype(np.int64)
         peak_stop_idxes = self.sequences_df["peak_stop_idx"].values.astype(np.int64)
 
-        # 确保碎片 m/z 数组是浮点类型
         all_frag_mzs = fragment_mz_df.values.astype(np.float64)
 
-        # 初始化结果数组
         matched_intensities = np.zeros_like(all_frag_mzs, dtype=np.float64)
         matched_mz_errs = np.full_like(all_frag_mzs, np.inf, dtype=np.float64)
-
-        # 执行匹配
         match_one_raw_with_numba(
             spec_idxes=psm_df["row_idx"].values,  # √
             frag_start_idxes=psm_df["frag_start_idx"].values,  # √
@@ -463,27 +409,18 @@ class DenovoSequenceScoring:
         self.filtered_sequences_df = self.filtered_sequences_df[
             self.filtered_sequences_df["score"] >= 0.00001
         ]
-
-        if not self.filtered_sequences_df.empty:
-            self.filtered_sequences_df = filter_mass_match(
-                self.filtered_sequences_df,
-                mass_tol=self.mass_tol,
-                mass_error=self.ppm,
-                sequence_mass_col="modified_sequence mass",
-                precursor_mass_col="precursor_mass",
-            )
-        if not self.filtered_sequences_df.empty:
-            self.filtered_sequences_df = (
-                self.filtered_sequences_df.sort_values("score", ascending=False)
-                .drop_duplicates("spec_idx", keep="first")
-                .reset_index(drop=True)  # 重置索引，避免原索引混乱
-            )
+        "mass filter去除，dp_decoder已做"
+        # if not self.filtered_sequences_df.empty:
+        #     self.filtered_sequences_df = filter_mass_match(
+        #         self.filtered_sequences_df,
+        #         mass_tol=self.mass_tol,
+        #         mass_error=self.ppm,
+        #         sequence_mass_col="modified_sequence mass",
+        #         precursor_mass_col="precursor_mass"
+        #     )
         drop_cols = [
-            "sequence_rank",
-            "top",
             "peak_start_idx",
             "peak_stop_idx",
-            "ms_level",
             "row_idx",
             "frag_start_idx",
             "frag_stop_idx",
@@ -493,12 +430,12 @@ class DenovoSequenceScoring:
             self.filtered_sequences_df.drop(columns=existing_cols, inplace=True)
 
     def pGlyco_scoring_numba(self, gamma=0.94):
-        # 1. 保留原始精度（用float64，避免精度丢失）
+        # 1. 保留原始精度
         ppm = self.ppm
         matched_intensities = self.matched_intensity_df.values.astype(np.float64)
         matched_mz_err_ppm = self.matched_mz_err_ppm_df.values.astype(np.float64)
 
-        # 2. 提取每个序列的碎片分段索引（关键修正：传递正确的分段信息）
+        # 2. 提取每个序列的碎片分段索引
         frag_start_idxes = self.sequences_df["frag_start_idx"].values.astype(np.int64)
         frag_stop_idxes = self.sequences_df["frag_stop_idx"].values.astype(np.int64)
 

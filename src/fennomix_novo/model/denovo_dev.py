@@ -15,8 +15,9 @@ from torch.optim import Adam
 from tqdm import tqdm
 
 from fennomix_novo.data_set import hdf_dataloader
-from fennomix_novo.decoders import DPDecoderTail, PeptideDecoderHead
-from fennomix_novo.encoders import SpectrumEncoder
+from fennomix_novo.decoders.dp_decoder import DP_Decoder
+from fennomix_novo.decoders.peptide_decoder import PeptideNARDecoder
+from fennomix_novo.encoders.spectrum_encoder import SpectrumEncoder
 from fennomix_novo.scoring import pGlyco_score
 
 
@@ -32,12 +33,8 @@ def get_default_device():
 @dataclass
 class Modelconfig:
     train_scratch: bool = True
-    encode_strategy = (
-        "base"  # base, peaks_tokenizer_only, peaks_tokenizer_with_base, helix_with_base
-    )
-    peaks_tokenizer: bool = False  # False when using casanovo encoder weight
-    "weighted loss parameters"
-    use_score_weight: bool = True
+    use_weighted_sample: bool = True  # useful for long tail data
+    use_weighted_score: bool = True  # useful for low quality data
     score_mean: float = 2.16
     score_std: float = 0.75
     weight_min: float = 0.5
@@ -48,11 +45,13 @@ class Modelconfig:
     min_mz: float = 50.0
     max_mz: int = 2500
     min_intensity: float = 0.01
-    remove_precursor_tol: float = 2.0  # Unused
+    remove_precursor_tol: float = 2.0
     max_charge: int = 10
-    top_k: int = 10  # Unused, for dp_decoder
+    top_k: int = 10
     top_k_output: int = 10
-    precursor_mass_tol: int = 50  # ppm
+    precursor_mass_tol: int = 2  # Da
+    precursor_mass_ppm: int = 20  # ppm
+    fragment_mass_ppm: int = 20  # ppm
     min_length: int = 8
     max_length: int = 14
     dim_model: int = 512
@@ -85,40 +84,25 @@ class Modelconfig:
             "Y": 163.063329,
             "W": 186.079313,
             "M+15.995": 147.035400,
-            "N+0.984": 115.026943,
-            "Q+0.984": 129.042594,
-            "+42.011": 42.010565,
-            "Y+183.035": 346.099,
-            "K+183.035": 311.130,
-            "-18.011": -18.011,
-            "-17.027": -17.027,
             "C+119.004": 222.014,
         }
     )
-    n_log: int = 1  # Unused
-    tb_summarywriter: str | None = None
     train_label_smoothing: float = 0.01
-    model_save_path: str = "/home/chenzx/project/grade0/denovo_sequencing_immunopeptides/trained_model_weight/FeNNetNovo_Task0_baseline.ckpt"
+    model_save_path: str = ""
     warmup_iters: int = 100_000
     cosine_schedule_period_iters: int = 600_000
     learning_rate: float = 0.0001
     weight_decay: float = 1e-5
     train_batch_size: int = 64
-    eval_batch_size: int = 1024
+    eval_batch_size: int = 100
     max_epochs: int = 20
-    num_sanity_val_steps: int = 0  # Unused Lightning 正式训练前预检
-    save_top_k: int = 5  # Unused
-    val_check_interval: int = 2500  # Unused
-    calculate_precision: bool = False  # Unused: no evaluation mode
     devices: bool | None = None
 
 
 @dataclass
 class Config:
-    pipeline: str = "train"
-    seed: int = 454
     device, device_str = get_default_device()
-    config: Modelconfig = Modelconfig()
+    config: Modelconfig = field(default_factory=Modelconfig)
 
 
 def seeding(seed):
@@ -131,66 +115,41 @@ def seeding(seed):
         torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    print("seeding done!!!")
+
+
+config = Config()
+mconfig = config.config
+seeding(mconfig.random_seed)
 
 
 class PeptideMass:
-    canonical = {
-        "G": 57.021464,
-        "A": 71.037114,
-        "S": 87.032028,
-        "P": 97.052764,
-        "V": 99.068414,
-        "T": 101.047670,
-        "C+57.021": 160.030649,
-        "L": 113.084064,
-        "I": 113.084064,
-        "C": 103.009649,
-        "N": 114.042927,
-        "D": 115.026943,
-        "Q": 128.058578,
-        "K": 128.094963,
-        "E": 129.042593,
-        "M": 131.040485,
-        "H": 137.058912,
-        "F": 147.068414,
-        "R": 156.101111,
-        "Y": 163.063329,
-        "W": 186.079313,
-        "M+15.995": 147.035400,
-        "N+0.984": 115.026943,
-        "Q+0.984": 129.042594,
-        "+42.011": 42.010565,
-        "Y+183.035": 346.099,
-        "K+183.035": 311.130,
-        "-18.011": -18.011,
-        "-17.027": -17.027,
-        "C+119.004": 222.014,
-        "$": 0,
-    }
     # Constants
     hydrogen = 1.007825035
     oxygen = 15.99491463
     h2o = 2 * hydrogen + oxygen
     proton = 1.00727646688
 
-    def __init__(self, residues="canonical"):
-        if residues == "canonical":
-            self.masses = self.canonical
-        elif residues == "massivekb":
-            self.masses = self.canonical
-            self.masses.update(self.massivekb)
-        else:
-            self.masses = residues
+    def __init__(self, residues: dict[str, float]):
+        if not isinstance(residues, dict):
+            raise TypeError("residues must be a dict[str, float]")
+
+        self.masses = residues
 
     def __len__(self):
         return len(self.masses)
 
-    def mass(self, seq, charge=None):
-        if isinstance(seq, str):
-            seq = re.split(r"(?<=.)(?=[A-Z])", seq)
+    def _split_sequence(self, seq: str):
+        return re.split(r"(?<=.)(?=[A-Z])", seq)
 
-        calc_mass = sum([self.masses[aa] for aa in seq]) + self.h2o
+    def mass(self, seq, charge: int | None = None):
+        if isinstance(seq, str):
+            seq = self._split_sequence(seq)
+
+        try:
+            calc_mass = sum(self.masses[aa] for aa in seq) + self.h2o
+        except KeyError as e:
+            raise KeyError(f"Unknown residue detected: {e.args[0]}") from e
+
         if charge is not None:
             calc_mass = (calc_mass / charge) + self.proton
 
@@ -213,7 +172,7 @@ def batch_truncate_after_eos(truth: torch.Tensor, eos_token: int, pad_token: int
 
 def pep_recall_evaluate(pred, truth):
     max_values, max_indices = torch.max(pred, dim=2)
-    truncated_pred = batch_truncate_after_eos(max_indices, 31, 0)
+    truncated_pred = batch_truncate_after_eos(max_indices, 24, 0)
     matches = truncated_pred == truth
     num_exact_matches = torch.sum(matches.all(dim=1))
     pep_top1_recall = num_exact_matches.item() / len(pred)
@@ -225,7 +184,7 @@ class WeightedCrossEntropyLoss(nn.Module):
         self,
         ignore_index: int = 0,
         train_label_smoothing: float = 0.01,
-        use_score_weight: bool = True,
+        use_weighted_score: bool = True,
         score_mean: float = None,
         score_std: float = None,
         weight_min: float = 0.5,
@@ -236,17 +195,19 @@ class WeightedCrossEntropyLoss(nn.Module):
         Args:
             ignore_index: pad id.
             label_smoothing: label smoothing param passed to F.cross_entropy.
-            use_score_weight: whether to enable score-based weighting.
-            score_mean, score_std: 全局（dataset-level）score均值与标准差。若 use_score_weight=True，**必须提供**。
+            use_weighted_score: whether to enable score-based weighting.
+            score_mean, score_std: 全局（dataset-level）score均值与标准差。若 use_weighted_score=True，**必须提供**。
             weight_min, weight_max: 最终权重映射区间 [weight_min, weight_max]。
             eps: 防止除零。
         """
         super().__init__()
         self.ignore_index = ignore_index
         self.train_label_smoothing = train_label_smoothing
-        self.use_score_weight = use_score_weight
-        if self.use_score_weight and (score_mean is None or score_std is None):
-            raise ValueError("use_score_weight=True 时必须提供 score_mean 和 score_std（全局统计）")
+        self.use_weighted_score = use_weighted_score
+        if self.use_weighted_score and (score_mean is None or score_std is None):
+            raise ValueError(
+                "use_weighted_score=True 时必须提供 score_mean 和 score_std（全局统计）"
+            )
         self.score_mean = float(score_mean) if score_mean is not None else None
         self.score_std = float(score_std) if score_std is not None else None
         self.weight_min = float(weight_min)
@@ -266,7 +227,7 @@ class WeightedCrossEntropyLoss(nn.Module):
             label_smoothing=self.train_label_smoothing,
             reduction="none",
         )
-        if self.use_score_weight and score is not None:
+        if self.use_weighted_score and score is not None:
             # z-score归一化
             device = pred.device
             B = batch_size
@@ -280,11 +241,11 @@ class WeightedCrossEntropyLoss(nn.Module):
             sample_loss = loss_per_token.sum(dim=1) / valid_counts
 
             # 全局 z-score + sigmod映射
-            z = torch.tensor((score - self.score_mean) / (self.score_std + self.eps))
+            z = (torch.tensor(score, device=device) - self.score_mean) / (self.score_std + self.eps)
             s = torch.sigmoid(z)
             weights = self.weight_min + s * (self.weight_max - self.weight_min)  # (B,)
 
-            loss = (sample_loss * weights.to(device)).mean()
+            loss = (sample_loss * weights).mean()
         else:
             loss = loss_per_token.mean()
 
@@ -302,20 +263,20 @@ class Spec2pep(torch.nn.Module):
         dim_intensity=None,
         max_length=14,
         residues="canonical",
-        max_charge=5,
-        precursor_mass_tol=50,
+        max_charge=10,
         min_length=8,
         train_label_smoothing=0.01,
         warmup_iters=100_000,
         cosine_schedule_period_iters=600_000,
         top_k=10,
         top_k_output=10,
-        use_score_weight=True,
+        use_weighted_score=True,
         score_mean: float = 2.16,
         score_std: float = 0.75,
         weight_min: float = 0.5,
         weight_max: float = 1.5,
-        encode_strategy: str = "base",
+        precursor_mass_tol: int = 2,
+        precursor_mass_ppm: int = 20,  # ppm
     ):
         super().__init__()
         self.residues = residues
@@ -328,9 +289,8 @@ class Spec2pep(torch.nn.Module):
             n_layers=n_layers,
             dropout=dropout,
             dim_intensity=dim_intensity,
-            encode_strategy=encode_strategy,
         )
-        self.decoder = PeptideDecoderHead(
+        self.decoder = PeptideNARDecoder(
             dim_model=dim_model,
             n_head=n_head,
             dim_feedforward=dim_feedforward,
@@ -340,11 +300,7 @@ class Spec2pep(torch.nn.Module):
             max_length=max_length,
             num_classes=len(PeptideMass(residues=residues).masses) + 1,
         )
-        self.dp_decoder = DPDecoderTail(
-            residues=residues,
-            top_k=self.top_k,
-            top_k_output=self.top_k_output,
-        )
+
         self.softmax = torch.nn.Softmax(2)
 
         self.celoss = torch.nn.CrossEntropyLoss(
@@ -354,24 +310,75 @@ class Spec2pep(torch.nn.Module):
         self.weighted_celoss = WeightedCrossEntropyLoss(
             ignore_index=0,
             train_label_smoothing=train_label_smoothing,
-            use_score_weight=use_score_weight,
+            use_weighted_score=use_weighted_score,
             score_mean=score_mean,
             score_std=score_std,
             weight_min=weight_min,
             weight_max=weight_max,
         )
 
-        self.use_score_weight = use_score_weight
+        self.use_weighted_score = use_weighted_score
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
+        self.min_length = min_length
         self.max_length = max_length
         self.precursor_mass_tol = precursor_mass_tol
-        self.min_len = min_length
+        self.precursor_mass_ppm = precursor_mass_ppm
         self._peptide_mass = PeptideMass(residues=residues)
-        self._amino_acids = list(self._peptide_mass.masses.keys()) + ["$"]  # 不添加<pad>
-        self._idx2aa = {i + 1: aa for i, aa in enumerate(self._amino_acids)}
-        self._aa2idx = {aa: i for i, aa in self._idx2aa.items()}
-        self.stop_token = self._aa2idx["$"]  # 暂未定义
+        self._amino_acids = list(self._peptide_mass.masses.keys()) + ["$"]
+        self._aa2idx = {aa: i + 1 for i, aa in enumerate(self._amino_acids)}
+        self._idx2aa = {i: aa for aa, i in self._aa2idx.items()}
+        self.stop_token = self._aa2idx["$"]
+        self.dp_decoder = DP_Decoder(
+            residues=residues,
+            top_k=self.top_k,
+            top_k_output=self.top_k_output,
+            eos_idx=self.stop_token,
+            min_length=self.min_length,
+            max_length=self.max_length,
+            mass_tol=self.precursor_mass_tol,
+            ppm=self.precursor_mass_ppm,
+        )
+
+    def calculate_dp_top10_recall(self, pred, truth_sequences, precursors):  # noqa: C901
+        """
+        输入：
+            pred: (B, L, V)
+            truth_sequences: list[str]
+            precursors: (B, ?)
+        """
+        if len(truth_sequences) == 0:
+            return 0.0
+        precursor_masses_np = precursors[:, 0].detach().cpu().numpy()
+
+        dp_predict_seq, _, _, valid_mask = self.dp_decoder.find_top_sequence(
+            logits=pred, precursors_masses=precursor_masses_np
+        )
+        correct = 0
+        total = 0
+        for i in range(len(truth_sequences)):
+            truth_seq = truth_sequences[i]
+            if not isinstance(truth_seq, str) or len(truth_seq.strip()) == 0:
+                continue
+            if valid_mask[i] == 0:
+                total += 1
+                continue
+            truth_clean = truth_seq.strip().replace("I", "L")
+            if "$" in truth_clean:
+                truth_clean = truth_clean.split("$")[0]
+            pred_list = dp_predict_seq[i]
+            pred_clean_list = []
+            for seq in pred_list:
+                if not seq:
+                    continue
+                seq_clean = seq.replace("I", "L").strip()
+                if "$" in seq_clean:
+                    seq_clean = seq_clean.split("$")[0]
+                if seq_clean:
+                    pred_clean_list.append(seq_clean)
+            if truth_clean in pred_clean_list:
+                correct += 1
+        return correct / total if total > 0 else 0.0
 
     def tokenize(self, sequence, partial=False):
         """Transform a peptide sequence into tokens
@@ -393,7 +400,8 @@ class Spec2pep(torch.nn.Module):
 
         if not partial:
             sequence += ["$"]
-        tokens = [self.decoder._aa2idx[aa] for aa in sequence]
+
+        tokens = [self._aa2idx[aa] for aa in sequence]
         tokens = torch.tensor(tokens, device=self.decoder.device)
         return tokens
 
@@ -406,10 +414,7 @@ class Spec2pep(torch.nn.Module):
         spec_idx: list[str],
         batch_score: list[float],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        memories, mem_masks = self.encoder(spectra, precursors=precursors)  # mz tokenizer开关
-        "⭐可修改为固定长度，目前为不固定(tgt已经固定为14)"
-        # memories = memories[:, :14, :]
-        # mem_masks = mem_masks[:, :14]
+        memories, mem_masks = self.encoder(spectra, precursors=precursors)
         logits = self.decoder(
             precursors=precursors, memory=memories, memory_key_padding_mask=mem_masks
         )
@@ -424,46 +429,76 @@ class Spec2pep(torch.nn.Module):
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor, spec_idx: list[int]
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        memories, mem_masks = self.encoder(spectra, precursors=precursors)  # mz tokenizer开关
-        "⭐可修改为固定长度，目前为不固定(tgt已经固定为14)"
-        # memories = memories[:, :14, :]
-        # mem_masks = mem_masks[:, :14]
+        memories, mem_masks = self.encoder(spectra, precursors=precursors)
         logits = self.decoder(
             precursors=precursors, memory=memories, memory_key_padding_mask=mem_masks
         )
-        return logits, spec_idx
+        return logits, spec_idx, precursors
 
     def predict_step(
         self,
         batch: tuple[torch.Tensor, torch.Tensor, list[str]],
-    ) -> torch.Tensor:
-        pred, spec_idx = self.forward(*batch)  # pred: L,B,V+1 truth: B,L
-        dp_predict_seq, dp_predict_logits, _ = self.dp_decoder.decode(logits=pred)
-        return dp_predict_seq, dp_predict_logits, spec_idx  # 序列、原始logits、spec_idx
+        *args,
+    ):
+        pred, scan_num, precursors = self.forward(*batch)
+        precursor_masses_np = precursors[:, 0].cpu().numpy()
+
+        dp_predict_seq, _, dp_predict_scores, valid_mask = self.dp_decoder.find_top_sequence(
+            logits=pred, precursors_masses=precursor_masses_np
+        )
+        final_output = []
+        for i in range(len(scan_num)):
+            current_scan = scan_num[i]
+            seq_list = dp_predict_seq[i]
+            score_list = dp_predict_scores[i]
+            if len(seq_list) == 0:
+                continue
+            for rank_idx, (seq, score) in enumerate(
+                zip(seq_list, score_list, strict=False), start=1
+            ):
+                final_output.append([current_scan, seq, round(float(score), 4), rank_idx])
+
+        return final_output
 
     def training_step(
         self,
         batch: tuple[torch.Tensor, torch.Tensor, list[str]],
         mode: str = "train",
     ) -> torch.Tensor:
-        pred, truth, raw_name, spec_idx, batch_score = self._forward_step(
-            *batch
-        )  # pred: L,B,V+1 truth: B,L
-        B = pred.shape[0]
+        pred, truth, raw_name, spec_idx, batch_score = self._forward_step(*batch)
         peptide_recall = pep_recall_evaluate(pred, truth)
+
+        "recall"
+        dp_top10_recall = 0.0
+        if mode in ["eval", "val"]:
+            truth_sequences = []
+            for seq in batch[2]:  # batch[2]是peptide序列
+                if isinstance(seq, str):
+                    # 统一预处理：去空、去终止符
+                    clean_seq = seq.strip().rstrip("$")
+                    truth_sequences.append(clean_seq)
+                else:
+                    truth_sequences.append("")
+
+            dp_top10_recall = self.calculate_dp_top10_recall(pred, truth_sequences, batch[1])
+        "loss"
+        B = pred.shape[0]
         vocab_size = self.decoder.num_classes
         # batch_size = pred.shape[0]
 
         pred = pred.reshape(-1, vocab_size + 1)
         truth = truth.flatten()
-        if mode == "train" and self.use_score_weight:
+        if mode == "train" and self.use_weighted_score:
             loss = self.weighted_celoss(pred, truth, score=batch_score, batch_size=B)
-        elif mode == "train" and not self.use_score_weight:
+        elif mode == "train" and not self.use_weighted_score:
             loss = self.celoss(pred, truth)
         else:
             loss = self.val_celoss(pred, truth)
 
-        return loss, peptide_recall
+        if mode == "train":
+            return loss, peptide_recall  # training: return 2 metrics
+        else:
+            return loss, peptide_recall, dp_top10_recall  # eval, val: return 3 metrics
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
@@ -488,30 +523,6 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return lr_factor
 
 
-def load_model_weight(new_model: Spec2pep, pretrained_path: str) -> None:
-    pretrained_state = torch.load(pretrained_path, map_location="cpu", weights_only=False)
-
-    if "state_dict" in pretrained_state:
-        pretrained_state = pretrained_state["state_dict"]
-
-    state = {}
-    for key, value in pretrained_state.items():
-        state[key] = value
-    missing_keys, unexpected_keys = new_model.load_state_dict(state, strict=False)
-    print(f"Loaded encoder weights from {pretrained_path}")
-    print(f"Missing keys: {missing_keys}")
-    print(f"Unexpected keys: {unexpected_keys}")
-
-    if "config" in pretrained_state:
-        pretrained_dim = pretrained_state["config"]["dim_model"]
-        if pretrained_dim != new_model.encoder.dim_model:
-            raise ValueError(
-                f"Pretrained model dimension ({pretrained_dim}) "
-                f"does not match current model ({new_model.encoder.dim_model})"
-            )
-    return new_model
-
-
 def load_encoder_weigth(new_model: Spec2pep, pretrained_path: str) -> None:
     pretrained_state = torch.load(pretrained_path, map_location="cpu", weights_only=False)
 
@@ -522,10 +533,6 @@ def load_encoder_weigth(new_model: Spec2pep, pretrained_path: str) -> None:
     for key, value in pretrained_state.items():
         if key.startswith("encoder."):
             encoder_state[key] = value
-    missing_keys, unexpected_keys = new_model.load_state_dict(encoder_state, strict=False)
-    # print(f"Loaded encoder weights from {pretrained_path}")
-    # print(f"Missing keys: {missing_keys}")
-    # print(f"Unexpected keys: {unexpected_keys}")
 
     if "config" in pretrained_state:
         pretrained_dim = pretrained_state["config"]["dim_model"]
@@ -537,10 +544,74 @@ def load_encoder_weigth(new_model: Spec2pep, pretrained_path: str) -> None:
     return new_model
 
 
+def load_model_weight(new_model: Spec2pep, pretrained_path: str) -> None:  # noqa: C901
+    pretrained_state = torch.load(pretrained_path, map_location="cpu", weights_only=False)
+
+    if "state_dict" in pretrained_state:
+        pretrained_state = pretrained_state["state_dict"]
+
+    state = {}
+
+    for key, value in pretrained_state.items():
+        if key.startswith("encoder.diff_encoder.") or key.startswith("encoder.fusion_proj."):
+            continue
+        # mapping old tokenizer encoder keys to new encoder keys
+        if key == "encoder.int_mz_embedding.weight":
+            new_key = "encoder.tokenizer_encoder.int_mz_embedding.weight"
+
+        elif key == "encoder.dec_mz_embedding.weight":
+            new_key = "encoder.tokenizer_encoder.dec_mz_embedding.weight"
+
+        elif key == "encoder.input_proj.weight":
+            new_key = "encoder.tokenizer_encoder.input_proj.weight"
+
+        elif key == "encoder.input_proj.bias":
+            new_key = "encoder.tokenizer_encoder.input_proj.bias"
+
+        elif key == "encoder.token_lookup":
+            new_key = "encoder.tokenizer_encoder.token_lookup"
+
+        else:
+            new_key = key
+
+        if new_key in state:
+            raise ValueError(f"Key collision detected: {new_key}")
+
+        state[new_key] = value
+
+    missing_keys, unexpected_keys = new_model.load_state_dict(state, strict=False)
+
+    print(f"Loaded encoder weights from {pretrained_path}")
+
+    critical_keys = [
+        "encoder.tokenizer_encoder.int_mz_embedding.weight",
+        "encoder.tokenizer_encoder.dec_mz_embedding.weight",
+        "encoder.tokenizer_encoder.input_proj.weight",
+    ]
+
+    missing_critical = [k for k in missing_keys if k in critical_keys]
+
+    print(f"Missing keys: {missing_keys}")
+    print(f"Unexpected keys: {unexpected_keys}")
+
+    if missing_critical:
+        raise RuntimeError(f"Critical weights NOT loaded: {missing_critical}")
+
+    if "config" in pretrained_state:
+        pretrained_dim = pretrained_state["config"]["dim_model"]
+        if pretrained_dim != new_model.encoder.dim_model:
+            raise ValueError(
+                f"Pretrained model dimension ({pretrained_dim}) "
+                f"does not match current model ({new_model.encoder.dim_model})"
+            )
+
+    return new_model
+
+
 class ModelRunner:
     def __init__(
         self,
-        config: Modelconfig,  # 变量：类的实例
+        config: Modelconfig,
         model_filename: None,
     ) -> None:
         self.config = config
@@ -554,7 +625,6 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
-        self.save_top_k = config.save_top_k
         self.model_save_path = Path(self.config.model_save_path)
         self.min_valid_losses = 5.0
         self.max_recall = 0.0
@@ -580,7 +650,7 @@ class ModelRunner:
             project="FennOmix/FeNNetNovo",
             tags=["Task0_baseline"],
             dependencies="infer",
-            api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NjJjYjBjNy1kYTgxLTQ0NmEtYjc2Yy1kZmQyY2FiOGVhYjEifQ==",
+            api_token=os.getenv("NEPTUNE_API_TOKEN"),
             monitoring_namespace="monitoring",
             mode="offline",
         )
@@ -593,13 +663,16 @@ class ModelRunner:
             n_peaks=self.config.n_peaks,
             min_mz=self.config.min_mz,
             max_mz=self.config.max_mz,
+            random_state=self.config.random_seed,
             min_intensity=self.config.min_intensity,
             remove_precursor_tol=self.config.remove_precursor_tol,
+            weighted_sample=self.config.use_weighted_sample,
         )
         self.loaders.setup()
 
-        train_loader = self.loaders.get_train_loader()
-        valid_loader = self.loaders.get_val_loader()
+        train_loader = self.loaders.get_train_loader()  # train
+        valid_loader = self.loaders.get_val_loader()  # val
+        train_eval_loader = self.loaders.get_train_eval_loader()  # eval
 
         num_epochs = self.config.max_epochs
         print("model_save_path:", self.model_save_path)
@@ -629,41 +702,78 @@ class ModelRunner:
                 )
 
             epoch_loss /= len(train_loader)
-            val_loss, top1_val_peptide_recall = self.validate(valid_loader)
+            "train_eval_dataset"
+            self.model.eval()
+            train_eval_loss, train_eval_recall, train_eval_dp_recall = 0, 0, 0
+            with torch.no_grad():
+                for batch in train_eval_loader:
+                    batch = tuple(
+                        x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
+                    )
+                    loss, recall, dp_recall = self.model.training_step(batch, mode="val")
+                    train_eval_loss += loss.item()
+                    train_eval_recall += recall
+                    train_eval_dp_recall += dp_recall if dp_recall is not None else 0
+
+            train_eval_loss /= len(train_eval_loader)
+            train_eval_recall /= len(train_eval_loader)
+            train_eval_dp_recall /= len(train_eval_loader)
+
+            val_loss, top1_val_peptide_recall, val_dp_recall = self.validate(valid_loader)
 
             if top1_val_peptide_recall > self.max_recall:
                 self.max_recall = top1_val_peptide_recall
-                torch.save(self.model.state_dict(), self.model_save_path)
+                model_save_path = (
+                    str(self.model_save_path).replace(".ckpt", "")
+                    + "_val1_recall_"
+                    + f"{top1_val_peptide_recall:.3f}"
+                    + ".ckpt"
+                )
+                torch.save(self.model.state_dict(), model_save_path)
             print(
-                f"Epoch {epoch + 1}: Train Loss = {epoch_loss:.4f}, top1_val_peptide_recall = {top1_val_peptide_recall:.2f}, Val Loss = {val_loss:.4f}"
+                f"Epoch {epoch + 1}: Train Loss = {epoch_loss:.4f}, "
+                f"Train Eval Loss = {train_eval_loss:.4f}, Train Eval Top1 Recall = {train_eval_recall:.3f}, Train Eval Top10 Recall = {train_eval_dp_recall:.3f}, "
+                f"Val Loss = {val_loss:.4f}, Val Top1 Recall = {top1_val_peptide_recall:.3f}, Val Top10 Recall = {val_dp_recall:.3f}"
             )
             run["train/epoch_loss"].log(epoch_loss)
             run["val/epoch_loss"].log(val_loss)
             run["val/epoch_pep_top1_recall"].log(top1_val_peptide_recall)
+            run["train_eval_loss"].log(train_eval_loss)
+            run["train_eval_recall"].log(train_eval_recall)
+            run["train_eval/dp_top10_recall"].log(train_eval_dp_recall)
+            run["val/dp_top10_recall"].log(val_dp_recall)
 
     def validate(self, valid_loader):
         self.model.eval()
         losses = []
         recalls = []
+        dp_recalls = []
         with torch.no_grad():
             for batch in valid_loader:
                 batch = tuple(
                     x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
                 )
-                loss, top1_peptide_recall = self.model.training_step(batch, mode="val")
-                losses.append(loss.item())
-                recalls.append(top1_peptide_recall)
-        return sum(losses) / len(losses), sum(recalls) / len(recalls)
+                loss, top1_recall, dp_recall = self.model.training_step(batch, mode="val")
+
+                losses.append(float(loss.item()) if not torch.isnan(loss) else 0.0)
+                recalls.append(float(top1_recall) if top1_recall is not None else 0.0)
+                dp_recalls.append(
+                    float(dp_recall) if dp_recall is not None and not np.isnan(dp_recall) else 0.0
+                )
+
+        avg_loss = np.mean(losses) if losses else 0.0
+        avg_recall = np.mean(recalls) if recalls else 0.0
+        avg_dp_recall = np.mean(dp_recalls) if dp_recalls else 0.0
+
+        return avg_loss, avg_recall, avg_dp_recall
 
     def predict(self, predict_folder: str, out_put_folder: str):
         folder_path = Path(predict_folder)
         test_files = folder_path.glob("*.hdf5")
         self.initialize_model(mode="predict")
         for test_file_path in test_files:
-            "需要删除"
-            scored_df_csv_path = out_put_folder + "/" + test_file_path.stem + "with_score.csv"
-            scored_filtered_df_csv_path = out_put_folder + "/" + test_file_path.stem + "result.csv"
-            file_path = Path(scored_df_csv_path)
+            score_top_1_output_csv_path = out_put_folder + "/" + test_file_path.stem + "_result.csv"
+            file_path = Path(score_top_1_output_csv_path)
             if file_path.exists():
                 continue
             print("Process:", test_file_path)
@@ -686,45 +796,24 @@ class ModelRunner:
                     batch = tuple(
                         x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
                     )
-                    batch_result, batch_ori_logits, spec_idx = self.model.predict_step(batch)
-
-                    spec_idx_2d = spec_idx.reshape(-1, 1)  # 形状 (1024, 1)
-                    np.apply_along_axis(
-                        lambda x: ",".join([f"{value:.2f}" for value in x]),
-                        axis=2,
-                        arr=batch_ori_logits.cpu().numpy(),  # 先将张量转换为 NumPy 数组
-                    )  # 不保留logits
-                    merged = np.hstack([spec_idx_2d, batch_result])
-                    predict_result.append(merged)  # 将当前batch结果添加到列表
-
+                    # self.model.predict_step(batch)
+                    predict_batch_table = self.model.predict_step(batch)
+                    predict_result.extend(predict_batch_table)
+            "测试速度时 跳过"
             if predict_result:
                 all_merged = np.vstack(predict_result)
-
-                # 定义列名（根据后续topk调整，这里暂用）
-                columns = [
-                    "spec_idx",
-                    "seq1",
-                    "seq2",
-                    "seq3",
-                    "seq4",
-                    "seq5",
-                    "seq6",
-                    "seq7",
-                    "seq8",
-                    "seq9",
-                    "seq10",
-                ]
+                columns = ["spec_idx", "modified_sequence", "nar_dp_score", "nar_dp_top"]
                 df = pd.DataFrame(all_merged, columns=columns)
-                "在这里打分: input： df， test_file_path: hdf"
-                scored_df, filtered_df = pGlyco_score.score_sequence(df, test_file_path)
-                output_csv_path = out_put_folder + "/" + test_file_path.stem + "ori.csv"
-                df.to_csv(output_csv_path, index=False)
-                scored_df.to_csv(scored_df_csv_path, index=False)
-                filtered_df.to_csv(scored_filtered_df_csv_path, index=False)
+                scored_top1_df, filtered_scored_top1_df = pGlyco_score.score_sequence(
+                    df, test_file_path
+                )
+                score_top_1_output_csv_path = (
+                    out_put_folder + "/" + test_file_path.stem + "_result.csv"
+                )
+                filtered_scored_top1_df.to_csv(score_top_1_output_csv_path, index=False)
 
     def initialize_model(self, mode=None):
         self.model = Spec2pep(
-            encode_strategy=self.config.encode_strategy,
             dim_model=self.config.dim_model,
             n_head=self.config.n_head,
             dim_feedforward=self.config.dim_feedforward,
@@ -741,11 +830,12 @@ class ModelRunner:
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             top_k=self.config.top_k,
             top_k_output=self.config.top_k_output,
-            use_score_weight=self.config.use_score_weight,
+            use_weighted_score=self.config.use_weighted_score,
             score_mean=self.config.score_mean,
             score_std=self.config.score_std,
             weight_min=self.config.weight_min,
             weight_max=self.config.weight_max,
+            precursor_mass_ppm=self.config.precursor_mass_ppm,
         ).to(self.device)
 
         if mode == "predict":
@@ -798,27 +888,3 @@ def predict(
         print(f" {predict_folder}")
         runner.predict(predict_folder, out_put_folder)
     print("Predicting Done")
-
-
-ori_ne_weight = "C:/czx/Project/Grade0/denovo_sequencing_immunopeptides/trained_model_weight/for_bruker_zheyi_data/FeNNetNovo_dev4_oriencoder_0830_MgfData_based_for_bruker_finetune_150_token.ckpt"
-"训练好的model，该版本模型可直接使用, tokenizer关闭"
-model_path = "C:/czx/Project/Grade0/denovo_sequencing_immunopeptides/trained_model_weight/for_bruker_zheyi_data/SOTA/FeNNetNovo_Sampler+score2loss+all_mod_no_mass_val_recall_0.83_batch14trained.ckpt"
-test_data_path = r"C:/czx/Project/Grade0\denovo_sequencing_immunopeptides/trained_model_weight/test_data/YG480_MSP2401203_A549-30-R_with_seq.mgf"
-
-train_folder = (
-    "C:/czx/Project/Grade0/denovo_sequencing_immunopeptides/Data/zheyi_data/batch14/train_dataset"
-)
-val_folder = (
-    "C:/czx/Project/Grade0/denovo_sequencing_immunopeptides/Data/zheyi_data/batch14/val_dataset"
-)
-predict_folder = (
-    r"C:\czx\Project\Grade0\immunopeptides_dataset\zheyi_search_via_IEAtlas_db_test\hdf_denovo"
-)
-predict_output_folder = (
-    r"C:\czx\Project\Grade0\immunopeptides_dataset\zheyi_search_via_IEAtlas_db_test\hdf_denovo\test"
-)
-
-
-if __name__ == "__main__":
-    predict(predict_folder=predict_folder, out_put_folder=predict_output_folder, model=model_path)
-    # train(train_folder=train_folder,val_folder=val_folder,model=ori_ne_weight)
