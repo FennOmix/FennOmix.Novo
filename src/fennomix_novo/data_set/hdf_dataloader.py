@@ -16,8 +16,9 @@ def _remove_precursor_numpy(mz: np.ndarray, remove_mz: np.ndarray, tol: float):
     """
     numpy remove precursor peaks
     """
-    diff = np.abs(mz[:, None] - remove_mz[None, :])  # heavy cost
-    mask = ~np.any(diff < tol, axis=1)
+    mask = np.ones(len(mz), dtype=bool)
+    for rm in remove_mz:
+        mask &= np.abs(mz - rm) >= tol
     return mask
 
 
@@ -300,56 +301,62 @@ class HDFSpectrumDataset(Dataset):
         max_mz = self.max_mz
         min_intensity = self.min_intensity
         n_peaks = self.n_peaks
-        tol_precursor = self.remove_precursor_tol
+        tol = self.remove_precursor_tol
+
         adduct_mass = 1.007825
         c_mass_diff = 1.003355
         isotope = 0
 
-        mz = mz_array.astype(np.float64).copy()  # heavy cost
-        intensity = int_array.astype(np.float32).copy()  # heavy cost
+        mz = mz_array.astype(np.float64, copy=False)
+        intensity = int_array.astype(np.float32, copy=False)
 
         try:
             mask = (mz >= min_mz) & (mz <= max_mz)
-            mz, intensity = mz[mask], intensity[mask]  # heavy cost
-            if len(mz) == 0:
+            if not np.any(mask):
                 raise ValueError
 
             neutral_mass = (precursor_mz - adduct_mass) * precursor_charge
-            remove_mz = []
+
             for charge in range(precursor_charge, 0, -1):
+                base = neutral_mass / charge + adduct_mass
                 for iso in range(isotope + 1):
-                    rm = (neutral_mass + iso * c_mass_diff) / charge + adduct_mass
-                    remove_mz.append(rm)
-            remove_mz = np.array(remove_mz, dtype=np.float64)
+                    rm = base + iso * (c_mass_diff / charge)
+                    mask &= np.abs(mz - rm) >= tol
 
-            mask = _remove_precursor_numpy(mz, remove_mz, tol_precursor)
-            mz, intensity = mz[mask], intensity[mask]
-            if len(mz) == 0:
+            if not np.any(mask):
                 raise ValueError
 
-            max_int = intensity.max()
-            threshold = max_int * min_intensity
-            keep = intensity >= threshold
-            mz, intensity = mz[keep], intensity[keep]
-            if len(mz) == 0:
+            masked_intensity = intensity[mask]
+            if masked_intensity.size == 0:
                 raise ValueError
 
-            idx = np.argsort(intensity)[::-1]  # heavy cost
-            mz, intensity = mz[idx], intensity[idx]
+            threshold = masked_intensity.max() * min_intensity
+            mask &= intensity >= threshold
 
-            if len(mz) > n_peaks:
-                mz, intensity = mz[:n_peaks], intensity[:n_peaks]
+            if not np.any(mask):
+                raise ValueError
 
-            idx = np.argsort(mz)  # heavy cost
-            mz, intensity = mz[idx], intensity[idx]
+            mz = mz[mask]
+            intensity = intensity[mask]
 
-            intensities = np.sqrt(intensity)
-            norm = np.linalg.norm(intensities)
+            k = min(n_peaks, mz.shape[0])
+            if mz.shape[0] > k:
+                idx = np.argpartition(intensity, -k)[-k:]
+                mz = mz[idx]
+                intensity = intensity[idx]
+
+            order = np.argsort(mz)
+            mz = mz[order]
+            intensity = intensity[order]
+
+            intensity = np.sqrt(intensity, dtype=np.float32)
+            norm = np.linalg.norm(intensity)
             if norm <= 1e-12:
                 raise ValueError
-            intensities = intensities / norm
 
-            return np.stack([mz, intensities]).T.astype(np.float32)
+            intensity /= norm
+
+            return np.stack((mz, intensity), axis=1).astype(np.float32, copy=False)
 
         except ValueError:
             return np.array([[0.0, 1.0]], dtype=np.float32)
@@ -425,61 +432,60 @@ class AnnotatedHDFSpectrumDataset(Dataset):
         precursor_mz: float,
         precursor_charge: int,
     ) -> np.ndarray:
-        """Fast Version of _process_peaks using numpy, without spectrum_utils"""
         min_mz = self.min_mz
         max_mz = self.max_mz
         min_intensity = self.min_intensity
         n_peaks = self.n_peaks
-        tol_precursor = self.remove_precursor_tol
+        tol = self.remove_precursor_tol
+
         adduct_mass = 1.007825
         c_mass_diff = 1.003355
         isotope = 0
 
-        mz = mz_array.astype(np.float64).copy()
-        intensity = int_array.astype(np.float32).copy()
+        mz = mz_array.astype(np.float64, copy=False)
+        intensity = int_array.astype(np.float32, copy=False)
 
         try:
             mask = (mz >= min_mz) & (mz <= max_mz)
-            mz, intensity = mz[mask], intensity[mask]
-            if len(mz) == 0:
+            if not np.any(mask):
                 raise ValueError
-
             neutral_mass = (precursor_mz - adduct_mass) * precursor_charge
-            remove_mz = []
+
             for charge in range(precursor_charge, 0, -1):
+                base = neutral_mass / charge + adduct_mass
                 for iso in range(isotope + 1):
-                    rm = (neutral_mass + iso * c_mass_diff) / charge + adduct_mass
-                    remove_mz.append(rm)
-            remove_mz = np.array(remove_mz, dtype=np.float64)
+                    rm = base + iso * (c_mass_diff / charge)
+                    mask &= np.abs(mz - rm) >= tol
 
-            mask = _remove_precursor_numpy(mz, remove_mz, tol_precursor)
-            mz, intensity = mz[mask], intensity[mask]
-            if len(mz) == 0:
+            if not np.any(mask):
+                raise ValueError
+            masked_intensity = intensity[mask]
+            if masked_intensity.size == 0:
                 raise ValueError
 
-            max_int = intensity.max()
-            threshold = max_int * min_intensity
-            keep = intensity >= threshold
-            mz, intensity = mz[keep], intensity[keep]
-            if len(mz) == 0:
+            threshold = masked_intensity.max() * min_intensity
+            mask &= intensity >= threshold
+
+            if not np.any(mask):
                 raise ValueError
-
-            idx = np.argsort(intensity)[::-1]
-            mz, intensity = mz[idx], intensity[idx]
-
-            if len(mz) > n_peaks:
-                mz, intensity = mz[:n_peaks], intensity[:n_peaks]
-
-            idx = np.argsort(mz)
-            mz, intensity = mz[idx], intensity[idx]
-
-            intensities = np.sqrt(intensity)
-            norm = np.linalg.norm(intensities)
+            mz = mz[mask]
+            intensity = intensity[mask]
+            k = min(n_peaks, mz.shape[0])
+            if mz.shape[0] > k:
+                idx = np.argpartition(intensity, -k)[-k:]
+                mz = mz[idx]
+                intensity = intensity[idx]
+            order = np.argsort(mz)
+            mz = mz[order]
+            intensity = intensity[order]
+            intensity = np.sqrt(intensity, dtype=np.float32)
+            norm = np.linalg.norm(intensity)
             if norm <= 1e-12:
                 raise ValueError
-            intensities = intensities / norm
 
-            return np.stack([mz, intensities]).T.astype(np.float32)
+            intensity /= norm
+
+            return np.stack((mz, intensity), axis=1).astype(np.float32, copy=False)
 
         except ValueError:
             return np.array([[0.0, 1.0]], dtype=np.float32)
@@ -565,7 +571,7 @@ class DeNovoDataModule:
         max_mz: float = 2500,
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
-        n_workers: int | None = 0,  # win 0
+        n_workers: int | None = 0,  # win 0, linux 16
         random_state: int | None = 454,
         annotated=True,
         eval_subset_ratio: float = 0.1,

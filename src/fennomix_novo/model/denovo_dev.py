@@ -888,3 +888,6 @@ def predict(
         print(f" {predict_folder}")
         runner.predict(predict_folder, out_put_folder)
     print("Predicting Done")
+
+
+# predict(predict_folder=r'X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test', out_put_folder= r'X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test', model=r'X:\chenzx\raw_Data\HLA\HLA_v2_all_data\trained_weights\FeNNetNovo_HLA_v2_SOTA_simple_mod_500psm_max_recall_0301.ckpt')
