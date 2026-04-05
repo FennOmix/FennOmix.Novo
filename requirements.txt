@@ -11,5 +11,5 @@ pyteomics==4.7.5
 setuptools==80.9.0
 spectrum_utils==0.5.0
 tensorboard==2.20.0
-torch==2.2.2+cu118
+torch>=2.2.0
 tqdm==4.67.3
