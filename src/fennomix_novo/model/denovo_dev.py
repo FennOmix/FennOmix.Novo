@@ -11,7 +11,6 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.optim import Adam
 from tqdm import tqdm
 
 from fennomix_novo.data_set import hdf_dataloader
@@ -360,8 +359,8 @@ class Spec2pep(torch.nn.Module):
             truth_seq = truth_sequences[i]
             if not isinstance(truth_seq, str) or len(truth_seq.strip()) == 0:
                 continue
+            total += 1
             if valid_mask[i] == 0:
-                total += 1
                 continue
             truth_clean = truth_seq.strip().replace("I", "L")
             if "$" in truth_clean:
@@ -843,7 +842,11 @@ class ModelRunner:
         else:
             if not self.config.train_scratch:
                 self.model = load_encoder_weigth(self.model, self.model_filename)
-                self.optimizer = Adam(self.model.parameters(), lr=self.config.learning_rate)
+                self.optimizer = torch.optim.AdamW(
+                    self.model.parameters(),
+                    lr=self.config.learning_rate,
+                    weight_decay=self.config.weight_decay,
+                )
                 self.lr_scheduler = CosineWarmupScheduler(
                     self.optimizer,
                     self.config.warmup_iters,
@@ -851,7 +854,11 @@ class ModelRunner:
                 )
             else:
                 print("Training from scratch...")
-                self.optimizer = Adam(self.model.parameters(), lr=self.config.learning_rate)
+                self.optimizer = torch.optim.AdamW(
+                    self.model.parameters(),
+                    lr=self.config.learning_rate,
+                    weight_decay=self.config.weight_decay,
+                )
                 self.lr_scheduler = CosineWarmupScheduler(
                     self.optimizer,
                     self.config.warmup_iters,
