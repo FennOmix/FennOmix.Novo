@@ -33,6 +33,9 @@ def get_default_device():
 class Modelconfig:
     train_scratch: bool = True
     use_weighted_sample: bool = True  # useful for long tail data
+    use_chunked_weighted_sample: bool = (
+        False  # Set as True when dataset size large than 1800w, and set use_weighted_sample=False
+    )
     use_weighted_score: bool = True  # useful for low quality data
     score_mean: float = 2.16
     score_std: float = 0.75
@@ -666,6 +669,7 @@ class ModelRunner:
             min_intensity=self.config.min_intensity,
             remove_precursor_tol=self.config.remove_precursor_tol,
             weighted_sample=self.config.use_weighted_sample,
+            chunked_weighted_sample=self.config.use_chunked_weighted_sample,
         )
         self.loaders.setup()
 

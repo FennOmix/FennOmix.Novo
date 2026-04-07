@@ -558,6 +558,60 @@ def prepare_batch(batch):
         return spectra, precursors, np.array(spec_idx)
 
 
+class ChunkedWeightedSampler(torch.utils.data.Sampler):
+    """Chunked weighted sampler for large datasets that cannot fit weights in memory
+    Ori WeightedRandomSampler can't handel dataset with more than 1800w sample"""
+
+    def __init__(self, weights, num_samples, chunk_size=10000000, replacement=True):
+        self.weights = weights
+        self.num_samples = num_samples
+        self.chunk_size = chunk_size
+        self.replacement = replacement
+
+        self.n = len(weights)
+
+        self.chunks = []
+        for start in range(0, self.n, chunk_size):
+            end = min(start + chunk_size, self.n)
+            self.chunks.append((start, end))
+
+    def __iter__(self):
+        samples = []
+
+        for start, end in self.chunks:
+            w = self.weights[start:end]
+
+            k = int(self.num_samples * (end - start) / self.n)
+
+            if k == 0:
+                continue
+
+            idx = torch.multinomial(
+                w,
+                num_samples=k,
+                replacement=self.replacement,
+            )
+
+            samples.append(idx + start)
+
+        if len(samples) == 0:
+            return iter([])
+
+        samples = torch.cat(samples)
+
+        if len(samples) < self.num_samples:
+            extra = torch.randint(0, self.n, (self.num_samples - len(samples),))
+            samples = torch.cat([samples, extra])
+
+        perm = torch.randperm(len(samples))
+        samples = samples[perm]
+
+        return iter(samples.tolist())
+
+    def __len__(self):
+        return self.num_samples
+
+
 class DeNovoDataModule:
     def __init__(
         self,
@@ -576,6 +630,7 @@ class DeNovoDataModule:
         annotated=True,
         eval_subset_ratio: float = 0.1,
         weighted_sample: bool = True,
+        chunked_weighted_sample: bool = False,
     ):
         super().__init__()
         self._seed = random_state
@@ -592,6 +647,7 @@ class DeNovoDataModule:
         self.valid_dataset = None
         self.test_dataset = None
         self.weighted_sample = weighted_sample
+        self.chunked_weighted_sample = chunked_weighted_sample
         self.eval_subset_ratio = eval_subset_ratio
         self.eval_subset_seed = random_state
         self.train_eval_dataset = None
@@ -623,6 +679,14 @@ class DeNovoDataModule:
                 self.sampler = WeightedRandomSampler(
                     self.train_dataset.dataparser.peptide_weights,
                     num_samples=len(self.train_dataset.dataparser.peptide_weights),
+                    replacement=True,
+                )
+            elif self.chunked_weighted_sample:
+                print("Chunked_sample_weighted based on charge_modified_sequence......")
+                self.sampler = ChunkedWeightedSampler(
+                    self.train_dataset.dataparser.peptide_weights,
+                    num_samples=len(self.train_dataset.dataparser.peptide_weights),
+                    chunk_size=10000000,
                     replacement=True,
                 )
             print("Training dataset initialized with", len(self.train_dataset), "spectra")
@@ -658,7 +722,7 @@ class DeNovoDataModule:
     def get_train_loader(self):
         if self.sampler:
             return self.get_loader(
-                self.train_dataset, self.train_batch_size, shuffle=True, sampler=self.sampler
+                self.train_dataset, self.train_batch_size, shuffle=False, sampler=self.sampler
             )
         else:
             return self.get_loader(self.train_dataset, self.train_batch_size, shuffle=True)
