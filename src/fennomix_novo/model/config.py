@@ -84,13 +84,21 @@ class Modelconfig:
     train_batch_size: int = 64
     eval_batch_size: int = 128  # recommend 64 or 128
     max_epochs: int = 20
-    devices: bool | None = None
+    device: str = "cpu"  # cpu or cuda, if None: try to get cuda
 
 
 @dataclass
 class Config:
-    device, device_str = get_default_device()
+    device: torch.device | None = None
+    device_str: str | None = None
     config: Modelconfig = field(default_factory=Modelconfig)
+
+    def __post_init__(self):
+        try:
+            self.device_str = self.config.device
+            self.device = torch.device(self.device_str)
+        except:  # noqa: E722
+            self.device, self.device_str = get_default_device()
 
 
 def seeding(seed):

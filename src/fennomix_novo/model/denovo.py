@@ -26,7 +26,7 @@ class ModelRunner:
         self.config = config
         self.model_filename = model_filename
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(self.config.device)
 
         self.tmp_dir = None
         self.trainer = None
