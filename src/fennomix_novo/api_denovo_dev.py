@@ -22,7 +22,8 @@ import sys
 import warnings
 from pathlib import Path
 
-from fennomix_novo.model.denovo_dev import Config, ModelRunner
+from fennomix_novo.model.config import Config
+from fennomix_novo.model.denovo import ModelRunner
 
 
 class DeNovoDevAPI:
