@@ -1,3 +1,5 @@
+import csv
+import datetime
 import os
 import tempfile
 from pathlib import Path
@@ -37,6 +39,10 @@ class ModelRunner:
         self.min_valid_losses = 5.0
         self.max_recall = 0.0
 
+        # ===================== 速度记录相关 =====================
+        self.time_logs = [["hdf5文件名", "开始时间", "完成时间", "运行时长", "状态"]]
+        self.output_root = ""
+
     def __enter__(self):
         """Enter the context manager"""
         self.tmp_dir = tempfile.TemporaryDirectory()
@@ -47,6 +53,13 @@ class ModelRunner:
         self.tmp_dir = None
         if self.writer is not None:
             self.writer.save()
+
+        # ===================== 退出时保存速度日志 =====================
+        if self.output_root and len(self.time_logs) > 1:
+            csv_log_path = os.path.join(self.output_root, "predict_time_log.csv")
+            with open(csv_log_path, "w", newline="", encoding="utf-8-sig") as f:
+                csv.writer(f).writerows(self.time_logs)
+            print(f"\n📊 速度计时日志已保存：{csv_log_path}")
 
     def train(
         self,
@@ -79,9 +92,9 @@ class ModelRunner:
         )
         self.loaders.setup()
 
-        train_loader = self.loaders.get_train_loader()  # train
-        valid_loader = self.loaders.get_val_loader()  # val
-        train_eval_loader = self.loaders.get_train_eval_loader()  # eval
+        train_loader = self.loaders.get_train_loader()
+        valid_loader = self.loaders.get_val_loader()
+        train_eval_loader = self.loaders.get_train_eval_loader()
 
         num_epochs = self.config.max_epochs
         print("model_save_path:", self.model_save_path)
@@ -94,7 +107,7 @@ class ModelRunner:
             for _step, batch in enumerate(progress_bar):
                 batch = tuple(
                     x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
-                )  # spectra, precursors, peptides, raw_names, spec_idx, score
+                )
                 loss, peptide_recall = self.model.training_step(batch, mode="train")
                 run["train/step_loss"].log(loss)
                 run["train/step_pep_top1_recall"].log(peptide_recall)
@@ -111,7 +124,6 @@ class ModelRunner:
                 )
 
             epoch_loss /= len(train_loader)
-            "train_eval_dataset"
             self.model.eval()
             train_eval_loss, train_eval_recall, train_eval_dp_recall = 0, 0, 0
             with torch.no_grad():
@@ -178,48 +190,92 @@ class ModelRunner:
 
     def predict(self, predict_folder: str, out_put_folder: str):
         folder_path = Path(predict_folder)
-        test_files = folder_path.glob("*.hdf5")
+        test_files = sorted(folder_path.glob("*.hdf5"))  # 保证顺序
+        self.output_root = out_put_folder  # 保存日志路径
         self.initialize_model(mode="predict")
-        for test_file_path in test_files:
-            score_top_1_output_csv_path = out_put_folder + "/" + test_file_path.stem + "_result.csv"
-            file_path = Path(score_top_1_output_csv_path)
-            if file_path.exists():
-                continue
-            print("Process:", test_file_path)
-            self.loaders = hdf_dataloader.DeNovoDataModule(
-                test_path=test_file_path,
-                eval_batch_size=self.config.eval_batch_size,
-                n_peaks=self.config.n_peaks,
-                min_mz=self.config.min_mz,
-                max_mz=self.config.max_mz,
-                min_intensity=self.config.min_intensity,
-                remove_precursor_tol=self.config.remove_precursor_tol,
-                annotated=False,
+
+        success_count = 0
+        skip_count = 0
+        fail_count = 0
+
+        print(f"\n🚀 开始预测，共 {len(test_files)} 个 .hdf5 文件")
+
+        for test_file_path in tqdm(test_files, desc="预测进度", unit="文件"):
+            file_name = test_file_path.name
+            score_top_1_output_csv_path = os.path.join(
+                out_put_folder, test_file_path.stem + "_result.csv"
             )
-            self.loaders.setup()
-            predict_result = []
-            predict_loader = self.loaders.get_test_loader()
-            self.model.eval()
-            with torch.no_grad():
-                for batch in tqdm(predict_loader):
-                    batch = tuple(
-                        x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
+
+            # ===================== 跳过已存在文件 =====================
+            if os.path.exists(score_top_1_output_csv_path):
+                file_size_kb = os.path.getsize(score_top_1_output_csv_path) / 1024
+                if file_size_kb > 10:  # 大于10kb跳过
+                    tqdm.write(f"⏭️  已跳过：{file_name} ({file_size_kb:.2f}KB)")
+                    self.time_logs.append([file_name, "-", "-", "-", "已跳过"])
+                    skip_count += 1
+                    continue
+
+            # ===================== 计时开始 =====================
+            start_time = datetime.datetime.now()
+            start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+            status = "成功"
+
+            try:
+                print(f"\n📄 处理：{test_file_path.name}")
+                self.loaders = hdf_dataloader.DeNovoDataModule(
+                    test_path=test_file_path,
+                    eval_batch_size=self.config.eval_batch_size,
+                    n_peaks=self.config.n_peaks,
+                    min_mz=self.config.min_mz,
+                    max_mz=self.config.max_mz,
+                    min_intensity=self.config.min_intensity,
+                    remove_precursor_tol=self.config.remove_precursor_tol,
+                    annotated=False,
+                )
+                self.loaders.setup()
+                predict_result = []
+                predict_loader = self.loaders.get_test_loader()
+                self.model.eval()
+
+                with torch.no_grad():
+                    for batch in tqdm(predict_loader, leave=False):
+                        batch = tuple(
+                            x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
+                        )
+                        predict_batch_table = self.model.predict_step(batch)
+                        predict_result.extend(predict_batch_table)
+
+                # 保存结果
+                if predict_result:
+                    all_merged = np.vstack(predict_result)
+                    columns = ["spec_idx", "modified_sequence", "nar_dp_score", "nar_dp_top"]
+                    df = pd.DataFrame(all_merged, columns=columns)
+                    scored_top1_df, filtered_scored_top1_df = pGlyco_score.score_sequence(
+                        df, test_file_path
                     )
-                    # self.model.predict_step(batch)
-                    predict_batch_table = self.model.predict_step(batch)
-                    predict_result.extend(predict_batch_table)
-            "测试速度时 跳过"
-            if predict_result:
-                all_merged = np.vstack(predict_result)
-                columns = ["spec_idx", "modified_sequence", "nar_dp_score", "nar_dp_top"]
-                df = pd.DataFrame(all_merged, columns=columns)
-                scored_top1_df, filtered_scored_top1_df = pGlyco_score.score_sequence(
-                    df, test_file_path
-                )
-                score_top_1_output_csv_path = (
-                    out_put_folder + "/" + test_file_path.stem + "_result.csv"
-                )
-                filtered_scored_top1_df.to_csv(score_top_1_output_csv_path, index=False)
+                    filtered_scored_top1_df.to_csv(score_top_1_output_csv_path, index=False)
+
+                success_count += 1
+
+            except Exception as e:
+                print(f"❌ 处理失败：{file_name}, 错误：{str(e)}")
+                status = "失败"
+                fail_count += 1
+
+            # ===================== 计时结束 =====================
+            end_time = datetime.datetime.now()
+            end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            duration = end_time - start_time
+            duration_str = str(duration).split(".")[0]
+
+            # 记录日志
+            self.time_logs.append([file_name, start_str, end_str, duration_str, status])
+            tqdm.write(f"✅ {status} | {file_name} | 耗时：{duration_str}")
+
+        # ===================== 最终统计 =====================
+        print("\n" + "=" * 60)
+        print(f"📊 预测完成！成功：{success_count} | 跳过：{skip_count} | 失败：{fail_count}")
+        print("=" * 60)
 
     def initialize_model(self, mode=None):
         self.model = FoxNovoNARModel(
@@ -296,7 +352,7 @@ def train(
 def predict(
     predict_folder: str,
     model: str | None,
-    out_put_folder=str,
+    out_put_folder: str,
 ) -> None:
     mconfig = Config()
     config = mconfig.config
@@ -305,10 +361,3 @@ def predict(
         print(f" {predict_folder}")
         runner.predict(predict_folder, out_put_folder)
     print("Predicting Done")
-
-
-# predict(
-#     predict_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     out_put_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     model=r"X:\chenzx\raw_Data\HLA\HLA_v2_all_data\trained_weights\FeNNetNovo_HLA_v2_SOTA_simple_mod_500psm_max_recall_0301.ckpt",
-# )

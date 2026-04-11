@@ -307,8 +307,9 @@ def predict(
     print("Predicting Done")
 
 
-# predict(
-#     predict_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     out_put_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     model=r"X:\chenzx\raw_Data\HLA\HLA_v2_all_data\trained_weights\FeNNetNovo_HLA_v2_SOTA_simple_mod_500psm_max_recall_0301.ckpt",
-# )
+if __name__ == "__main__":
+    predict(
+        predict_folder=r"C:\czx\Project\Grade0\immunopeptides_dataset\code\paper_code",
+        out_put_folder=r"C:\czx\Project\Grade0\immunopeptides_dataset\code\paper_code",
+        model=r"X:\chenzx\raw_Data\HLA\HLA_v2_all_data\trained_weights\HLA_v2_simple_mod_c57_final_version\FeNNetNovo_HLA_v2_simple_mod_500psm_SOTA_val1_recall_0.908.ckpt",
+    )

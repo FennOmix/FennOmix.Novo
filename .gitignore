@@ -214,3 +214,6 @@ local_test/
 .vscode/
 *.iml
 *.xml
+
+# dev.py
+SGAM.py

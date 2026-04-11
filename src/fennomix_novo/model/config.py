@@ -85,6 +85,7 @@ class Modelconfig:
     eval_batch_size: int = 128  # recommend 64 or 128
     max_epochs: int = 20
     device: str = "cpu"  # cpu or cuda, if None: try to get cuda
+    cpu_threads: int = 16  # work if using cpu
 
 
 @dataclass
@@ -99,6 +100,9 @@ class Config:
             self.device = torch.device(self.device_str)
         except:  # noqa: E722
             self.device, self.device_str = get_default_device()
+        if self.device_str == "cpu":
+            torch.set_num_threads(self.config.cpu_threads)
+            torch.set_num_interop_threads(self.config.cpu_threads)
 
 
 def seeding(seed):
