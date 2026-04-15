@@ -1,4 +1,4 @@
-"""Setup script for FennOmix.Novo package.
+"""Setup script for FoxNovo package.
 
 This file is kept for backward compatibility with tools that don't yet
 support pyproject.toml-only builds. Modern Python packaging should rely

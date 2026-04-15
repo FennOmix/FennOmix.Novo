@@ -1,5 +1,5 @@
 """
-FennOmix Novo Dev - Unified Train and Predict API (Development Version)
+FoxNovo Dev - Unified Train and Predict API (Development Version)
 
 This module provides a high-level API and CLI for training and prediction with the
 DeNovo Dev peptide sequencing model (denovo_dev.py).
@@ -12,9 +12,9 @@ Key features:
 
 Usage:
     # Train
-    python -m fennomix_novo.api_denovo_dev train --train-folder /path/to/train --val-folder /path/to/val
+    python -m foxnovo.api_denovo_dev train --train-folder /path/to/train --val-folder /path/to/val
     # Predict
-    python -m fennomix_novo.api_denovo_dev predict --predict-folder /path/to/test --output-folder /path/to/output --model-weights /path/to/model.ckpt
+    python -m foxnovo.api_denovo_dev predict --predict-folder /path/to/test --output-folder /path/to/output --model-weights /path/to/model.ckpt
 """
 
 import argparse
@@ -22,13 +22,13 @@ import sys
 import warnings
 from pathlib import Path
 
-from fennomix_novo.model.config import Config
-from fennomix_novo.model.denovo import ModelRunner
+from foxnovo.model.config import Config
+from foxnovo.model.denovo import ModelRunner
 
 
 class DeNovoDevAPI:
     """
-    High-level API for FennOmix Novo Dev de novo peptide sequencing model.
+    High-level API for FoxNovo Dev de novo peptide sequencing model.
     This is the development version with enhanced features:
     - Weighted sampling for long-tail data handling
     - Weighted scoring for low-quality spectrum handling
@@ -224,7 +224,7 @@ def train(train_folder: str, val_folder: str, model_weights: str | None = None, 
         model_weights (Optional[str]): Path to pre-trained model weights.
         **kwargs: Additional arguments passed to DeNovoDevAPI.train()
     Examples:
-        >>> from fennomix_novo.api_denovo_dev import train
+        >>> from foxnovo.api_denovo_dev import train
         >>> train(
         ...     train_folder="/data/train",
         ...     val_folder="/data/val",
@@ -247,7 +247,7 @@ def predict(
         output_folder (str): Path to save results.
         model_weights (str): Path to model weights.
     Examples:
-        >>> from fennomix_novo.api_denovo_dev import predict
+        >>> from foxnovo.api_denovo_dev import predict
         >>> predict(
         ...     predict_folder="/data/test",
         ...     output_folder="/results",
@@ -261,8 +261,8 @@ def predict(
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
-        prog="fennomix_novo_dev",
-        description="FennOmix Novo Dev - DeNovo Peptide Sequencing Model (Development)",
+        prog="foxnovo_dev",
+        description="FoxNovo Dev - DeNovo Peptide Sequencing Model (Development)",
         epilog="For more information, visit the project repository.",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")

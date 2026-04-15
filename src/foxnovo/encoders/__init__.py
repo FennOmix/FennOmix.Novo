@@ -1,5 +1,5 @@
 """
-fennomix_novo.encoders: Encoder Modules for De Novo Sequencing
+foxnovo.encoders: Encoder Modules for De Novo Sequencing
 Base encoders and spectrum encoder for mass spectrometry data.
 """
 
