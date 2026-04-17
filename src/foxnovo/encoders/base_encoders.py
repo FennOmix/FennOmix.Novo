@@ -47,7 +47,7 @@ class FloatEncoder(torch.nn.Module):
         self.register_buffer("sin_term", sin_term)
         self.register_buffer("cos_term", cos_term)
 
-    def forward(self, X):
+    def forward(self, X, **kwargs):
         """Encode m/z values.
 
         Parameters
@@ -63,6 +63,13 @@ class FloatEncoder(torch.nn.Module):
         sin_mz = torch.sin(X[:, :, None] / self.sin_term)
         cos_mz = torch.cos(X[:, :, None] / self.cos_term)
         return torch.cat([sin_mz, cos_mz], axis=-1)
+
+    @property
+    def device(self) -> torch.device:
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            return self.sin_term.device
 
 
 class PeakEncoder(torch.nn.Module):
@@ -122,7 +129,7 @@ class PeakEncoder(torch.nn.Module):
                 max_wavelength=1,
             )
 
-    def forward(self, X):
+    def forward(self, X, **kwargs):
         """Encode m/z values and intensities.
 
         Note that we expect intensities to fall within the interval [0, 1].
@@ -152,6 +159,10 @@ class PeakEncoder(torch.nn.Module):
 
         return torch.cat([encoded, intensity], dim=2)
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.parameters()).device
+
 
 class PositionalEncoder(FloatEncoder):
     """The positional encoder for sequences.
@@ -174,7 +185,7 @@ class PositionalEncoder(FloatEncoder):
             max_wavelength=max_wavelength,
         )
 
-    def forward(self, X):
+    def forward(self, X, **kwargs):
         """Encode positions in a sequence.
 
         Parameters
@@ -198,3 +209,41 @@ class PositionalEncoder(FloatEncoder):
         cos_pos = torch.cos(cos_in / self.cos_term)
         encoded = torch.cat([sin_pos, cos_pos], axis=2)
         return encoded + X
+
+
+class TokenizerEncoder(torch.nn.Module):
+    def __init__(self, dim_model: int = 512, peaks_max_int: int = 3000, padding_idx: int = 0):
+        super().__init__()
+        self.dim_model = dim_model
+        self.peaks_max_int = peaks_max_int
+        self.padding_idx = padding_idx
+        self.mz_token = list(range(0, 1000))
+        self.mz_token.extend(list(range(1000, self.peaks_max_int * 1000 + 1, 1000)))
+        mz2idx_map = torch.full((max(self.mz_token) + 1,), fill_value=padding_idx, dtype=torch.long)
+        for idx, val in enumerate(self.mz_token):
+            mz2idx_map[val] = idx
+        self.register_buffer("token_lookup", mz2idx_map)
+        vocab_size = len(self.mz_token)
+        self.int_mz_embedding = torch.nn.Embedding(vocab_size, dim_model, padding_idx=padding_idx)
+        self.dec_mz_embedding = torch.nn.Embedding(1000, dim_model, padding_idx=padding_idx)
+        self.input_proj = torch.nn.Linear(dim_model * 4, dim_model)
+
+    @property
+    def device(self) -> torch.device:
+        return next(self.parameters()).device
+
+    def peaks2token(self, spectra) -> tuple[torch.Tensor, torch.Tensor]:
+        spectra_mz = spectra[:, :, 0].squeeze(-1)
+        int_part = torch.floor(spectra_mz) * 1000
+        dec_part = torch.clamp(torch.round((spectra_mz - torch.floor(spectra_mz)) * 1000), max=999)
+        int_part = int_part.clamp(0, self.token_lookup.size(0) - 1).long()
+        dec_part = dec_part.clamp(0, self.token_lookup.size(0) - 1).long()
+        int_token = self.token_lookup[int_part]
+        dec_token = self.token_lookup[dec_part]
+        int_token_embedding = self.int_mz_embedding(int_token)
+        dec_token_embedding = self.dec_mz_embedding(dec_token)
+        return int_token_embedding, dec_token_embedding
+
+    def forward(self, spectra: torch.Tensor, **kwargs) -> torch.Tensor:
+        int_token_embedding, dec_token_embedding = self.peaks2token(spectra)
+        return int_token_embedding, dec_token_embedding

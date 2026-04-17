@@ -1,17 +1,12 @@
-"依然依赖于depthcharge"
-
 import torch
 from torch import nn
 
-from fennomix_novo.depthcharge.components.encoders import FloatEncoder, PositionalEncoder
-
-"to test: decoder 迭代细化 Iterative Non-Autoregressive, INAR"
+from foxnovo.encoders.base_encoders import FloatEncoder, PositionalEncoder
 
 
-class PeptideDecoderHead(nn.Module):
+class PeptideNARDecoder(nn.Module):
     """
     Deep Learning-based Decoder
-    只负责生成概率分布
     """
 
     def __init__(
@@ -26,18 +21,14 @@ class PeptideDecoderHead(nn.Module):
         max_length: int = 14,
         num_classes: int = 20,
     ):
-        super().__init__()
         nn.Module.__init__(self)
         self.max_length = max_length
         self.num_classes = num_classes
         self.dim_model = dim_model
-
-        "位置编码"
         if pos_encoder:
             self.pos_encoder = PositionalEncoder(dim_model)
         else:
             self.pos_encoder = torch.nn.Identity()
-        "precursors 编码"
         self.charge_encoder = torch.nn.Embedding(max_charge, dim_model)
         self.mass_encoder = FloatEncoder(dim_model)
 
@@ -54,29 +45,30 @@ class PeptideDecoderHead(nn.Module):
         self.final = torch.nn.Linear(dim_model, num_classes + 1)  # +1 for PAD
 
     @property
-    def device(self):
+    def device(self) -> torch.device:
         return next(self.parameters()).device
 
     def forward(
         self,
-        precursors: torch.Tensor,
         memory: torch.Tensor,
+        precursors: torch.Tensor,
         memory_key_padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
-        forward：生成 logits
+        forward: generate logits
 
         Args:
-            precursors: [B, 5] 前体物信息
-            memory: [B, L_mem, D] 编码器输出
-            memory_key_padding_mask: [B, L_mem] 掩码
+            precursors: [B, 5] precursor_mass, precursor_charge
+            memory: [B, L_mem, D] encoder output
+            memory_key_padding_mask: [B, L_mem] mask
 
         Returns:
-            logits: [B, L_tgt, num_classes+1] 原始 logits
+            logits: [B, L_tgt, num_classes+1] logits
         """
+        masses = self.mass_encoder(precursors[:, None, 0])
         charges = self.charge_encoder(precursors[:, 1].int() - 1)
-        # precursors = masses + charges[:, None, :]
-        precursors = charges[:, None, :]  # 去掉mass信息
+        precursors = masses + charges[:, None, :]
+        # precursors = charges[:, None, :]  # remove precursor mass, may be useful for tims tof daa
         tgt = precursors.repeat(1, self.max_length + 1, 1)  # [B, L, D]
         tgt_key_padding_mask = tgt.sum(axis=2) == 0
         tgt = self.pos_encoder(tgt)
@@ -88,7 +80,5 @@ class PeptideDecoderHead(nn.Module):
             tgt_key_padding_mask=tgt_key_padding_mask,
             memory_key_padding_mask=memory_key_padding_mask,
         )
-
-        # 生成 logits
         logits = self.final(dec_out)  # [B, L ,num_classes+1]
         return logits

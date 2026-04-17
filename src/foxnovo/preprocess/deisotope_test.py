@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 # 假设 Preprocess 和 AtomLib 与当前测试文件在同一目录，否则需调整导入路径
-from fennomix_novo.preprocess import AtomLib, Preprocess  # 替换为实际的 Preprocess 所在文件名
+from foxnovo.preprocess import AtomLib, Preprocess  # 替换为实际的 Preprocess 所在文件名
 
 
 class TestPreprocess(unittest.TestCase):

@@ -1,1 +1,1 @@
-# FennOmix.Novo
+# FennOmix.Novo (FoxNovo)
