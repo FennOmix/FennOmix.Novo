@@ -1,11 +1,16 @@
+import contextlib
 import os
 import tempfile
+import time
 from pathlib import Path
 
 import neptune
 import numpy as np
 import pandas as pd
 import torch
+
+# import and set for api
+import torch.multiprocessing as mp
 from tqdm import tqdm
 
 from foxnovo.data_set import hdf_dataloader
@@ -13,7 +18,11 @@ from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
 from foxnovo.model.config import Config, Modelconfig
 from foxnovo.model.foxnovo import FoxNovoNARModel
 from foxnovo.model.scheduler import CosineWarmupScheduler
+from foxnovo.model.utils import worker_predict_step
 from foxnovo.scoring import pGlyco_score
+
+with contextlib.suppress(RuntimeError):
+    mp.set_start_method("spawn", force=True)
 
 
 class ModelRunner:
@@ -176,12 +185,89 @@ class ModelRunner:
 
         return avg_loss, avg_recall, avg_dp_recall
 
-    def predict(self, predict_folder: str, out_put_folder: str):
+    def predict_cpu(self, predict_folder: str, output_folder: str):
+        """predict using gpu"""
+        folder_path = Path(predict_folder)
+        test_files = sorted(folder_path.glob("*.hdf5"))
+        self.output_root = output_folder
+        self.initialize_model(mode="predict")
+        torch.set_num_threads(self.config.cpu_threads)
+        n_process = self.config.cpu_process
+        input_queue = mp.Queue(maxsize=n_process * 2)
+        output_queue = mp.Queue()
+
+        processes = []
+
+        for _i in range(n_process):
+            p = mp.Process(
+                target=worker_predict_step,
+                args=(input_queue, output_queue, self.model, self.device),
+                daemon=True,
+            )
+            p.start()
+            processes.append(p)
+        for test_file_path in tqdm(test_files):
+            score_top_1_output_csv_path = output_folder + "/" + test_file_path.stem + "_result.csv"
+            file_path = Path(score_top_1_output_csv_path)
+            if file_path.exists():
+                continue
+            print("Process:", test_file_path)
+            self.loaders = hdf_dataloader.DeNovoDataModule(
+                test_path=test_file_path,
+                eval_batch_size=self.config.eval_batch_size,
+                n_peaks=self.config.n_peaks,
+                min_mz=self.config.min_mz,
+                max_mz=self.config.max_mz,
+                min_intensity=self.config.min_intensity,
+                remove_precursor_tol=self.config.remove_precursor_tol,
+                annotated=False,
+            )
+            self.loaders.setup()
+            predict_loader = self.loaders.get_test_loader()
+            num_batches = len(predict_loader)
+            predict_result = []
+            sent_count = 0
+            received_count = 0
+            loader_iter = iter(predict_loader)
+
+            with tqdm(total=num_batches, desc="predicting...", leave=False, unit="batch") as pbar:
+                while received_count < num_batches:
+                    while sent_count < num_batches and not input_queue.full():
+                        try:
+                            batch = next(loader_iter)
+                            input_queue.put(batch)
+                            sent_count += 1
+                        except StopIteration:
+                            break
+
+                    try:
+                        while received_count < sent_count:
+                            result = output_queue.get(timeout=0.01)
+                            predict_result.extend(result)
+                            received_count += 1
+                            pbar.update(1)
+                    except:  # noqa: E722
+                        pass
+
+            if predict_result:
+                all_merged = np.vstack(predict_result)
+                columns = ["spec_idx", "modified_sequence", "nar_dp_score", "nar_dp_top"]
+                df = pd.DataFrame(all_merged, columns=columns)
+                scored_top1_df, filtered_scored_top1_df = pGlyco_score.score_sequence(
+                    df, test_file_path
+                )
+                score_top_1_output_csv_path = (
+                    output_folder + "/" + test_file_path.stem + "_result.csv"
+                )
+                filtered_scored_top1_df.to_csv(score_top_1_output_csv_path, index=False)
+
+    def predict(self, predict_folder: str, output_folder: str):
+        """predict using cuda"""
         folder_path = Path(predict_folder)
         test_files = folder_path.glob("*.hdf5")
         self.initialize_model(mode="predict")
         for test_file_path in test_files:
-            score_top_1_output_csv_path = out_put_folder + "/" + test_file_path.stem + "_result.csv"
+            score_top_1_output_csv_path = output_folder + "/" + test_file_path.stem + "_result.csv"
             file_path = Path(score_top_1_output_csv_path)
             if file_path.exists():
                 continue
@@ -217,7 +303,7 @@ class ModelRunner:
                     df, test_file_path
                 )
                 score_top_1_output_csv_path = (
-                    out_put_folder + "/" + test_file_path.stem + "_result.csv"
+                    output_folder + "/" + test_file_path.stem + "_result.csv"
                 )
                 filtered_scored_top1_df.to_csv(score_top_1_output_csv_path, index=False)
 
@@ -249,6 +335,9 @@ class ModelRunner:
 
         if mode == "predict":
             self.model = load_model_weight(self.model, self.model_filename)
+            if self.device.type == "cpu":
+                self.model.share_memory()
+                self.model.eval()
         else:
             if not self.config.train_scratch:
                 self.model = load_encoder_weight(self.model, self.model_filename)
@@ -296,19 +385,34 @@ def train(
 def predict(
     predict_folder: str,
     model: str | None,
-    out_put_folder=str,
+    output_folder=str,
 ) -> None:
     mconfig = Config()
     config = mconfig.config
     with ModelRunner(config, model) as runner:
         print("Predicting model from:")
         print(f" {predict_folder}")
-        runner.predict(predict_folder, out_put_folder)
+        if config.device == "cpu":
+            print("predicting using cpu...")
+            runner.predict_cpu(predict_folder, output_folder)
+        else:
+            runner.predict(predict_folder, output_folder)
     print("Predicting Done")
 
 
-# predict(
-#     predict_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     out_put_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     model=r"X:\chenzx\raw_Data\HLA\HLA_v2_all_data\trained_weights\FeNNetNovo_HLA_v2_SOTA_simple_mod_500psm_max_recall_0301.ckpt",
-# )
+if __name__ == "__main__":
+    start_time = time.time()
+    import torch.multiprocessing as mp
+
+    with contextlib.suppress(RuntimeError):
+        mp.set_start_method("spawn", force=True)
+
+    # 启动任务
+    predict(
+        predict_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\speed_test\fast_speed_test",
+        model=r"X:\chenzx\raw_Data\HLA\HLA_v2_all_data\trained_weights\HLA_v2_simple_mod_c57_final_version\FeNNetNovo_HLA_v2_simple_mod_500psm_SOTA_val1_recall_0.910.ckpt",
+        output_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\speed_test\fast_speed_test",
+    )
+    print("🏁 [Main] 整个预测流程结束")
+    end_time = time.time()
+    print("timt cost:", end_time - start_time)

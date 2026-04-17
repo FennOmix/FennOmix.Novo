@@ -208,7 +208,11 @@ class DeNovoDevAPI:
         print("Output format: spec_idx, modified_sequence, nar_dp_score, nar_dp_top")
         print("=" * 70)
         with ModelRunner(self.config.config, weights_to_use) as runner:
-            runner.predict(predict_folder, str(output_folder))
+            print("devices=", self.config.config.device)
+            if self.config.config.device == "cpu":
+                runner.predict_cpu(predict_folder, str(output_folder))
+            else:
+                runner.predict(predict_folder, str(output_folder))
         print("=" * 70)
         print("PREDICTION COMPLETED SUCCESSFULLY")
         print("=" * 70)
@@ -448,4 +452,10 @@ if __name__ == "__main__":
     # api = DeNovoDevAPI(model_weights="/path/to/model.ckpt")
     # api.train(train_folder="/path/to/train", val_folder="/path/to/val")
     # api.predict(predict_folder="/path/to/test", output_folder="/path/to/output")
+    import torch.multiprocessing as mp
+
+    try:  # noqa: SIM105
+        mp.set_start_method("spawn", force=True)  # 启动多进程
+    except RuntimeError:
+        pass
     sys.exit(main())
