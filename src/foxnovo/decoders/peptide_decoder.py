@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from fennomix_novo.encoders.base_encoders import FloatEncoder, PositionalEncoder
+from foxnovo.encoders.base_encoders import FloatEncoder, PositionalEncoder
 
 
 class PeptideNARDecoder(nn.Module):

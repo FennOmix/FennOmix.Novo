@@ -1,6 +1,6 @@
 import torch
 
-from fennomix_novo.encoders.base_encoders import PeakEncoder, TokenizerEncoder
+from foxnovo.encoders.base_encoders import PeakEncoder, TokenizerEncoder
 
 
 class SpectrumEncoder(torch.nn.Module):

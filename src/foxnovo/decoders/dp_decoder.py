@@ -2,7 +2,7 @@ import numpy as np
 import torch.nn.functional as F
 from numba import njit
 
-from fennomix_novo.depthcharge.masses import PeptideMass  # 后期单独处理
+from foxnovo.depthcharge.masses import PeptideMass  # 后期单独处理
 
 WATER_MW = 18.01056
 

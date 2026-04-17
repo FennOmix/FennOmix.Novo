@@ -8,12 +8,12 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from fennomix_novo.data_set import hdf_dataloader
-from fennomix_novo.model.checkpoint import load_encoder_weight, load_model_weight
-from fennomix_novo.model.config import Config, Modelconfig
-from fennomix_novo.model.foxnovo import FoxNovoNARModel
-from fennomix_novo.model.scheduler import CosineWarmupScheduler
-from fennomix_novo.scoring import pGlyco_score
+from foxnovo.data_set import hdf_dataloader
+from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
+from foxnovo.model.config import Config, Modelconfig
+from foxnovo.model.foxnovo import FoxNovoNARModel
+from foxnovo.model.scheduler import CosineWarmupScheduler
+from foxnovo.scoring import pGlyco_score
 
 
 class ModelRunner:

@@ -3,9 +3,9 @@ import re
 import torch
 import torch.nn.functional as F
 
-from fennomix_novo.decoders.dp_decoder import DP_Decoder
-from fennomix_novo.decoders.peptide_decoder import PeptideNARDecoder
-from fennomix_novo.encoders.spectrum_encoder import SpectrumEncoder
+from foxnovo.decoders.dp_decoder import DP_Decoder
+from foxnovo.decoders.peptide_decoder import PeptideNARDecoder
+from foxnovo.encoders.spectrum_encoder import SpectrumEncoder
 
 from .losses import WeightedCrossEntropyLoss
 from .utils import PeptideMass, pep_recall_evaluate
