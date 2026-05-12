@@ -14,17 +14,23 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 @nb.jit(nopython=True, parallel=True)
 def calculate_score_numba(
-    matched_intensities,  # 全量碎片匹配强度 (total_frags, n_frag_types)
-    matched_mz_err_ppm,  # 全量碎片匹配误差 (total_frags, n_frag_types)
-    frag_start_idxes,  # 每个序列的碎片起始索引 (n_sequences,)
-    frag_stop_idxes,  # 每个序列的碎片结束索引 (n_sequences,)
+    matched_intensities,
+    matched_mz_err_ppm,
+    frag_start_idxes,
+    frag_stop_idxes,
     ppm,
     gamma,
+    is_b_col,  # bool array of shape (n_frag_types,)
 ):
     n_sequences = len(frag_start_idxes)
+    n_frag_types = matched_intensities.shape[1]
     scores = np.zeros(n_sequences, dtype=np.float64)
     matched_counts = np.zeros(n_sequences, dtype=np.int32)
     matched_ratios = np.zeros(n_sequences, dtype=np.float64)
+    b_matched_counts = np.zeros(n_sequences, dtype=np.int32)
+    y_matched_counts = np.zeros(n_sequences, dtype=np.int32)
+    b_ratios = np.zeros(n_sequences, dtype=np.float64)
+    y_ratios = np.zeros(n_sequences, dtype=np.float64)
 
     for i in nb.prange(n_sequences):
         start = frag_start_idxes[i]
@@ -34,115 +40,58 @@ def calculate_score_numba(
         n_frag = stop - start
 
         if n_frag == 0:
-            scores[i] = 0.0
-            matched_counts[i] = 0
-            matched_ratios[i] = 0.0
             continue
 
-        # 关键修正：将二维掩码转为一维索引（避免Numba类型推断失败）
-        valid_indices = []
-        for row in range(seq_intensities.shape[0]):
-            for col in range(seq_intensities.shape[1]):
-                if seq_intensities[row, col] > 0 and np.abs(seq_errs[row, col]) <= ppm:
-                    valid_indices.append((row, col))
+        row_has_any = np.zeros(n_frag, dtype=np.bool_)
+        row_has_b = np.zeros(n_frag, dtype=np.bool_)
+        row_has_y = np.zeros(n_frag, dtype=np.bool_)
 
         total_score = 0.0
-        matched_rows = set()  # 用集合记录已匹配的行（去重）
+        for row in range(n_frag):
+            for col in range(n_frag_types):
+                if seq_intensities[row, col] > 0 and np.abs(seq_errs[row, col]) <= ppm:
+                    err = seq_errs[row, col]
+                    intensity = seq_intensities[row, col]
+                    err_ratio = np.abs(err) / ppm
+                    penalty = 1 - (err_ratio**4)
+                    total_score += np.log(intensity) * penalty
 
-        if valid_indices:
-            # 遍历有效索引计算分数（Numba对列表遍历支持更稳定）
-            for row, col in valid_indices:
-                err = seq_errs[row, col]
-                intensity = seq_intensities[row, col]
+                    row_has_any[row] = True
+                    if is_b_col[col]:
+                        row_has_b[row] = True
+                    else:
+                        row_has_y[row] = True
 
-                err_ratio = np.abs(err) / ppm
-                penalty = 1 - (err_ratio**4)
-                total_score += np.log(intensity) * penalty
-                matched_rows.add(row)  # 标记该行为已匹配
+        matched_count = np.sum(row_has_any)
+        b_count = np.sum(row_has_b)
+        y_count = np.sum(row_has_y)
 
-        matched_count = len(matched_rows)
         matched_ratio = matched_count / n_frag if n_frag > 0 else 0.0
+        b_ratio = b_count / n_frag if n_frag > 0 else 0.0
+        y_ratio = y_count / n_frag if n_frag > 0 else 0.0
+
+        # 最终分数（仍按总匹配比例加权）
         total_score *= matched_ratio**gamma
 
         scores[i] = total_score
         matched_counts[i] = matched_count
         matched_ratios[i] = matched_ratio
+        b_matched_counts[i] = b_count
+        y_matched_counts[i] = y_count
+        b_ratios[i] = b_ratio
+        y_ratios[i] = y_ratio
 
-    return scores, matched_counts, matched_ratios
+    return (
+        scores,
+        matched_counts,
+        matched_ratios,
+        b_matched_counts,
+        y_matched_counts,
+        b_ratios,
+        y_ratios,
+    )
 
 
-# # -------------------------- Numba 加速核心函数 --------------------------
-# @njit(parallel=True, fastmath=True)  # parallel=True 开启多线程，fastmath=True 加速浮点计算
-# def calculate_mass_match_numba(precursor_masses, sequence_masses, mass_tol, mass_error):
-#     """
-#     Numba 加速的质量匹配计算
-#     :param precursor_masses: 母离子质量数组 (n_samples,)
-#     :param sequence_masses: 序列质量数组 (n_samples,)
-#     :param mass_tol: Da偏移容忍度（int）
-#     :param mass_error: ppm误差容忍度（float）
-#     :return: 匹配结果数组 (n_samples,)，True=匹配，False=不匹配
-#     """
-#     n_samples = len(precursor_masses)
-#     offsets = np.arange(-mass_tol, mass_tol + 1, dtype=np.float64)  # 偏移量数组
-#     n_offsets = len(offsets)
-#     match_results = np.zeros(n_samples, dtype=np.bool_)
-#
-#     # 并行遍历每个样本（prange 是 Numba 并行循环）
-#     for i in prange(n_samples):
-#         prec_mass = precursor_masses[i]
-#         seq_mass = sequence_masses[i]
-#
-#         # 遍历所有偏移量，计算ppm误差
-#         for j in range(n_offsets):
-#             shifted_prec = prec_mass + offsets[j]
-#             ppm = np.abs(shifted_prec - seq_mass) / seq_mass * 1e6
-#             if ppm <= mass_error:
-#                 match_results[i] = True
-#                 break  # 找到匹配就跳出，减少计算
-#
-#     return match_results
-#
-#
-# # -------------------------- 主函数（集成Numba加速） --------------------------
-# def filter_mass_match(df, mass_tol, mass_error, sequence_mass_col="modified_sequence mass",
-#                       precursor_mass_col="precursor_mass"):
-#     """
-#     根据mass_tol（Da偏移）和mass_error（ppm误差）过滤DataFrame，保留满足质量匹配的行
-#     （Numba 加速版，比纯Numpy快5~20倍，数据量越大效果越明显）
-#
-#     参数说明：
-#         df (pd.DataFrame): 输入的原始DataFrame，需包含序列质量和母离子质量列
-#         mass_tol (int): Da水平的偏移容忍度（整数），会生成 [-mass_tol, ..., 0, ..., +mass_tol] 的偏移量
-#         mass_error (float): ppm水平的误差容忍度（浮点数），允许的最大ppm误差
-#         sequence_mass_col (str): 序列质量列的列名（默认："modified_sequence mass"）
-#         precursor_mass_col (str): 母离子质量列的列名（默认："precursor_mass"）
-#
-#     返回值：
-#         pd.DataFrame: 仅保留质量匹配（mass_match=True）的行，包含原始列和新增的mass_match列
-#     """
-#     df_copy = df.copy(deep=True)
-#
-#     # 1. 校验必要列和数据类型（保留原逻辑）
-#     required_cols = [sequence_mass_col, precursor_mass_col]
-#     missing_cols = [col for col in required_cols if col not in df_copy.columns]
-#     if missing_cols:
-#         raise ValueError(f"DataFrame缺少必要列：{', '.join(missing_cols)}")
-#
-#     for col in required_cols:
-#         if not pd.api.types.is_numeric_dtype(df_copy[col]):
-#             raise TypeError(f"{col}列必须是数值类型（int/float），当前类型：{df_copy[col].dtype}")
-#
-#     # 2. 提取数值数组（转为float64，适配Numba）
-#     precursor_masses = df_copy[precursor_mass_col].values.astype(np.float64)
-#     sequence_masses = df_copy[sequence_mass_col].values.astype(np.float64)
-#
-#     # 3. 调用Numba加速函数计算匹配结果
-#     df_copy["mass_match"] = calculate_mass_match_numba(precursor_masses, sequence_masses, mass_tol, mass_error)
-#
-#     # 4. 过滤匹配行并重置索引
-#     result_df = df_copy[df_copy["mass_match"]].reset_index(drop=True)
-#
-#     return result_df
 def filter_mass_match(
     df,
     mass_tol,
@@ -374,16 +323,16 @@ class DenovoSequenceScoring:
         matched_intensities = np.zeros_like(all_frag_mzs, dtype=np.float64)
         matched_mz_errs = np.full_like(all_frag_mzs, np.inf, dtype=np.float64)
         match_one_raw_with_numba(
-            spec_idxes=psm_df["row_idx"].values,  # √
-            frag_start_idxes=psm_df["frag_start_idx"].values,  # √
-            frag_stop_idxes=psm_df["frag_stop_idx"].values,  # √
-            all_frag_mzs=all_frag_mzs,  # √
-            all_spec_mzs=all_spec_mzs,  # √
-            all_spec_intensities=all_spec_intensities,  # √
-            peak_start_idxes=peak_start_idxes,  # √
-            peak_end_idxes=peak_stop_idxes,  # √
-            matched_intensities=matched_intensities,  # √
-            matched_mz_errs=matched_mz_errs,  # √
+            spec_idxes=psm_df["row_idx"].values,
+            frag_start_idxes=psm_df["frag_start_idx"].values,
+            frag_stop_idxes=psm_df["frag_stop_idx"].values,
+            all_frag_mzs=all_frag_mzs,
+            all_spec_mzs=all_spec_mzs,
+            all_spec_intensities=all_spec_intensities,
+            peak_start_idxes=peak_start_idxes,
+            peak_end_idxes=peak_stop_idxes,
+            matched_intensities=matched_intensities,
+            matched_mz_errs=matched_mz_errs,
             ppm=True,
             tol=self.ppm,
         )
@@ -430,24 +379,34 @@ class DenovoSequenceScoring:
             self.filtered_sequences_df.drop(columns=existing_cols, inplace=True)
 
     def pGlyco_scoring_numba(self, gamma=0.94):
-        # 1. 保留原始精度
         ppm = self.ppm
         matched_intensities = self.matched_intensity_df.values.astype(np.float64)
         matched_mz_err_ppm = self.matched_mz_err_ppm_df.values.astype(np.float64)
-
-        # 2. 提取每个序列的碎片分段索引
         frag_start_idxes = self.sequences_df["frag_start_idx"].values.astype(np.int64)
         frag_stop_idxes = self.sequences_df["frag_stop_idx"].values.astype(np.int64)
 
-        # 3. 调用修正后的Numba函数
-        scores, matched_counts, matched_ratios = calculate_score_numba(
-            matched_intensities, matched_mz_err_ppm, frag_start_idxes, frag_stop_idxes, ppm, gamma
+        cols = self.matched_intensity_df.columns
+        is_b_col = np.array([col.startswith("b") for col in cols], dtype=np.bool_)
+
+        (scores, matched_counts, matched_ratios, b_counts, y_counts, b_ratios, y_ratios) = (
+            calculate_score_numba(
+                matched_intensities,
+                matched_mz_err_ppm,
+                frag_start_idxes,
+                frag_stop_idxes,
+                ppm,
+                gamma,
+                is_b_col,
+            )
         )
 
-        # 4. 批量赋值结果
         self.sequences_df["score"] = scores.round(2).astype(np.float64)
         self.sequences_df["matched_ion_count"] = matched_counts
         self.sequences_df["matched_ion_ratio"] = matched_ratios.round(2).astype(np.float64)
+        self.sequences_df["b_matched_ion_count"] = b_counts
+        self.sequences_df["y_matched_ion_count"] = y_counts
+        self.sequences_df["b_matched_ion_ratio"] = b_ratios.round(2).astype(np.float64)
+        self.sequences_df["y_matched_ion_ratio"] = y_ratios.round(2).astype(np.float64)
 
 
 def score_sequence(sequences_df, hdf_path):
