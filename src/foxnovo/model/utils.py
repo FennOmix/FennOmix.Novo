@@ -51,9 +51,9 @@ def batch_truncate_after_eos(truth: torch.Tensor, eos_token: int, pad_token: int
     return truncated_padded
 
 
-def pep_recall_evaluate(pred, truth):
+def pep_recall_evaluate(pred, truth, eos_token):
     max_values, max_indices = torch.max(pred, dim=2)
-    truncated_pred = batch_truncate_after_eos(max_indices, 24, 0)
+    truncated_pred = batch_truncate_after_eos(max_indices, eos_token, 0)
     matches = truncated_pred == truth
     num_exact_matches = torch.sum(matches.all(dim=1))
     pep_top1_recall = num_exact_matches.item() / len(pred)

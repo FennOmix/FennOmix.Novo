@@ -42,6 +42,8 @@ class ModelRunner:
         train_folder: str,
         val_folder: str,
     ) -> None:
+        if not self.config.model_save_path:
+            raise ValueError("config.model_save_path must be provided for training.")
         self.initialize_model()
         run = neptune.init_run(
             project="FennOmix/FeNNetNovo",

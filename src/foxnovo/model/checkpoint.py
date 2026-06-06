@@ -14,6 +14,14 @@ def load_encoder_weight(new_model: FoxNovoNARModel, pretrained_path: str) -> Non
         if key.startswith("encoder."):
             encoder_state[key] = value
 
+    missing_keys, unexpected_keys = new_model.load_state_dict(encoder_state, strict=False)
+
+    critical_keys = [key for key in encoder_state if key.startswith("encoder.")]
+    missing_critical = [key for key in missing_keys if key in critical_keys]
+
+    if missing_critical:
+        raise RuntimeError(f"Critical encoder weights NOT loaded: {missing_critical}")
+
     if "config" in pretrained_state:
         pretrained_dim = pretrained_state["config"]["dim_model"]
         if pretrained_dim != new_model.encoder.dim_model:
@@ -21,6 +29,8 @@ def load_encoder_weight(new_model: FoxNovoNARModel, pretrained_path: str) -> Non
                 f"Pretrained model dimension ({pretrained_dim}) "
                 f"does not match current model ({new_model.encoder.dim_model})"
             )
+    if unexpected_keys:
+        print(f"Unexpected keys while loading encoder weights: {unexpected_keys}")
     return new_model
 
 
