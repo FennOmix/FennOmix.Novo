@@ -1,5 +1,6 @@
 import contextlib
 import os
+import queue
 import time
 from pathlib import Path
 
@@ -226,11 +227,12 @@ class ModelRunner:
                 predict_result.extend(batch_result)
         return predict_result
 
-    def _predict_cpu_parallel(self, loader):
+    def _predict_cpu_parallel(self, loader):  # noqa: C901
         n_process = self.config.cpu_process
         input_queue = mp.Queue(maxsize=n_process * 2)
         output_queue = mp.Queue()
         processes = []
+        sentinels_sent = False
 
         for _ in range(n_process):
             p = mp.Process(
@@ -247,29 +249,56 @@ class ModelRunner:
         received_count = 0
         loader_iter = iter(loader)
 
-        with tqdm(
-            total=num_batches, desc="predicting (CPU parallel)...", leave=False, unit="batch"
-        ) as pbar:
-            while received_count < num_batches:
-                while sent_count < num_batches and not input_queue.full():
-                    try:
-                        batch = next(loader_iter)
-                        input_queue.put(batch)
-                        sent_count += 1
-                    except StopIteration:
-                        break
+        try:
+            with tqdm(
+                total=num_batches, desc="predicting (CPU parallel)...", leave=False, unit="batch"
+            ) as pbar:
+                while received_count < num_batches:
+                    while sent_count < num_batches and not input_queue.full():
+                        try:
+                            batch = next(loader_iter)
+                            input_queue.put(batch)
+                            sent_count += 1
+                        except StopIteration:
+                            break
 
-                try:
+                    if sent_count == num_batches and not sentinels_sent:
+                        for _ in processes:
+                            input_queue.put(None)
+                        sentinels_sent = True
+
+                    dead_workers = [
+                        p.pid for p in processes if p.exitcode is not None and p.exitcode != 0
+                    ]
+                    if dead_workers:
+                        raise RuntimeError(
+                            f"Prediction worker exited unexpectedly before completion: {dead_workers}"
+                        )
+
                     while received_count < sent_count:
-                        result = output_queue.get(timeout=0.01)
+                        try:
+                            result = output_queue.get(timeout=0.01)
+                        except queue.Empty:
+                            if (
+                                sentinels_sent
+                                and not any(p.is_alive() for p in processes)
+                                and received_count < sent_count
+                            ):
+                                raise RuntimeError(
+                                    "Prediction workers exited before all queued batch results were received."
+                                ) from None
+                            break
                         predict_result.extend(result)
                         received_count += 1
                         pbar.update(1)
-                except:  # noqa: E722
-                    pass
-        for p in processes:
-            p.terminate()
-            p.join()
+            for p in processes:
+                p.join()
+        except Exception:
+            for p in processes:
+                if p.is_alive():
+                    p.terminate()
+                p.join()
+            raise
 
         return predict_result
 
