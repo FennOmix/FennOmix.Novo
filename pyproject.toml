@@ -65,6 +65,9 @@ tests = [
 Homepage = "https://github.com/FennOmix/FennOmix.Novo"
 Repository = "https://github.com/FennOmix/FennOmix.Novo"
 
+[project.scripts]
+foxnovo = "foxnovo.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
