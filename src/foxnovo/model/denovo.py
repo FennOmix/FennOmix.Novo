@@ -264,7 +264,22 @@ class ModelRunner:
 
                     if sent_count == num_batches and not sentinels_sent:
                         for _ in processes:
-                            input_queue.put(None)
+                            while True:
+                                dead_workers = [
+                                    p.pid
+                                    for p in processes
+                                    if p.exitcode is not None and p.exitcode != 0
+                                ]
+                                if dead_workers:
+                                    raise RuntimeError(
+                                        "Prediction worker exited unexpectedly before sentinel shutdown: "
+                                        f"{dead_workers}"
+                                    )
+                                try:
+                                    input_queue.put(None, timeout=0.1)
+                                    break
+                                except queue.Full:
+                                    continue
                         sentinels_sent = True
 
                     dead_workers = [
