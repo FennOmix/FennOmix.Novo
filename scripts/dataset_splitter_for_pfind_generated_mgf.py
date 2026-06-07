@@ -150,9 +150,9 @@ class HDFDataSplitter:
         val_ratio: float = 0.1,
         test_ratio: float = 0.0,
         random_state: int = None,
-        output_train: str = r"X:\chenzx\from_ssd_1029\chenzx\zheyi_data\training_dataset\batch11-14\train",
-        output_val: str = r"X:\chenzx\from_ssd_1029\chenzx\zheyi_data\training_dataset\batch11-14\val",
-        output_test: str = r"Z:\chenzx\zheyi_raw_data\MHC\ZheYi-LiverCancer\hdf_with_pfind_search_result_batch14\test_dataset",
+        output_train: str = "./output/train",
+        output_val: str = "./output/val",
+        output_test: str = "./output/test",
     ):
         self.hdf5_paths = hdf5_paths
         self.val_ratio = val_ratio

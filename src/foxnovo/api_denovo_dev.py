@@ -22,9 +22,6 @@ import sys
 import warnings
 from pathlib import Path
 
-from foxnovo.model.config import Config
-from foxnovo.model.denovo import ModelRunner
-
 
 class DeNovoDevAPI:
     """
@@ -65,6 +62,8 @@ class DeNovoDevAPI:
             ... )
         """
         self.model_weights = model_weights
+        from foxnovo.model.config import Config
+
         self.config = Config()
         self.runner = None
 
@@ -147,6 +146,8 @@ class DeNovoDevAPI:
         if model_save_path:
             print(f"Model save path: {model_save_path}")
         print("=" * 70)
+        from foxnovo.model.denovo import ModelRunner
+
         runner = ModelRunner(self.config.config, self.model_weights)  # noqa: F811
         runner.train(train_folder, val_folder)
         print("=" * 70)
@@ -207,6 +208,8 @@ class DeNovoDevAPI:
         print("=" * 70)
         print("Output format: spec_idx, modified_sequence, nar_dp_score, nar_dp_top")
         print("=" * 70)
+        from foxnovo.model.denovo import ModelRunner
+
         runner = ModelRunner(self.config.config, weights_to_use)  # noqa: F811
         print("devices=", self.config.config.device)
         runner.predict_batch(predict_folder, output_folder)

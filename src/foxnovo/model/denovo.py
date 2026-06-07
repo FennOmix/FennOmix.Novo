@@ -423,9 +423,9 @@ if __name__ == "__main__":
         mp.set_start_method("spawn", force=True)
 
     predict(
-        predict_folder=r"C:\czx\temp\test",
-        model=r"Z:\chenzx\from_hdd_large_260424\tool_code\FeNNetNovo_HLA_v2_simple_mod_500psm_SOTA_val1_recall_0.910.ckpt",
-        output_folder=r"C:\czx\temp\test",
+        predict_folder="./example_data/predict",
+        model="./example_data/model.ckpt",
+        output_folder="./example_output",
     )
     print("All prediction done!")
     end_time = time.time()
