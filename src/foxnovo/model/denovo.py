@@ -1,11 +1,14 @@
+import contextlib
 import os
-import tempfile
+import queue
+import time
 from pathlib import Path
 
 import neptune
 import numpy as np
 import pandas as pd
 import torch
+import torch.multiprocessing as mp
 from tqdm import tqdm
 
 from foxnovo.data_set import hdf_dataloader
@@ -13,7 +16,11 @@ from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
 from foxnovo.model.config import Config, Modelconfig
 from foxnovo.model.foxnovo import FoxNovoNARModel
 from foxnovo.model.scheduler import CosineWarmupScheduler
+from foxnovo.model.utils import worker_predict_step
 from foxnovo.scoring import pGlyco_score
+
+with contextlib.suppress(RuntimeError):
+    mp.set_start_method("spawn", force=True)
 
 
 class ModelRunner:
@@ -24,35 +31,20 @@ class ModelRunner:
     ) -> None:
         self.config = config
         self.model_filename = model_filename
-
         self.device = torch.device(self.config.device)
-
-        self.tmp_dir = None
         self.trainer = None
         self.model = None
         self.loaders = None
-        self.writer = None
-
         self.model_save_path = Path(self.config.model_save_path)
-        self.min_valid_losses = 5.0
         self.max_recall = 0.0
-
-    def __enter__(self):
-        """Enter the context manager"""
-        self.tmp_dir = tempfile.TemporaryDirectory()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.tmp_dir.cleanup()
-        self.tmp_dir = None
-        if self.writer is not None:
-            self.writer.save()
 
     def train(
         self,
         train_folder: str,
         val_folder: str,
     ) -> None:
+        if not self.config.model_save_path:
+            raise ValueError("config.model_save_path must be provided for training.")
         self.initialize_model()
         run = neptune.init_run(
             project="FennOmix/FeNNetNovo",
@@ -176,50 +168,154 @@ class ModelRunner:
 
         return avg_loss, avg_recall, avg_dp_recall
 
-    def predict(self, predict_folder: str, out_put_folder: str):
-        folder_path = Path(predict_folder)
-        test_files = folder_path.glob("*.hdf5")
+    def _create_predict_loader(self, hdf5_path: str):
+        return hdf_dataloader.DeNovoDataModule(
+            test_path=hdf5_path,
+            eval_batch_size=self.config.eval_batch_size,
+            n_peaks=self.config.n_peaks,
+            min_mz=self.config.min_mz,
+            max_mz=self.config.max_mz,
+            min_intensity=self.config.min_intensity,
+            remove_precursor_tol=self.config.remove_precursor_tol,
+            annotated=False,
+        )
+
+    def predict_one_file(self, hdf5_path: str) -> pd.DataFrame:
+        """
+        input: one hdf5 file path
+        output: one predicted dataframe with peak_ion_match_score
+        """
+        if self.model is None:
+            self.initialize_model(mode="predict")
+        datamodule = self._create_predict_loader(hdf5_path)
+        datamodule.setup()
+        loader = datamodule.get_test_loader()
+        if self.device.type == "cpu" and self.config.cpu_process > 1:
+            raw_results = self._predict_cpu_parallel(loader)
+        else:
+            raw_results = self._predict_single_device(loader)
+        scored_results = self._score_predictions(raw_results, hdf5_path)
+        return scored_results
+
+    def predict_batch(self, folder: str, output_folder: str | None = None):
+        """
+        input: folder path with hdf5 files
+        output: for each hdf5 file, one csv file with peak_ion_match_score
+        """
         self.initialize_model(mode="predict")
-        for test_file_path in test_files:
-            score_top_1_output_csv_path = out_put_folder + "/" + test_file_path.stem + "_result.csv"
-            file_path = Path(score_top_1_output_csv_path)
-            if file_path.exists():
-                continue
-            print("Process:", test_file_path)
-            self.loaders = hdf_dataloader.DeNovoDataModule(
-                test_path=test_file_path,
-                eval_batch_size=self.config.eval_batch_size,
-                n_peaks=self.config.n_peaks,
-                min_mz=self.config.min_mz,
-                max_mz=self.config.max_mz,
-                min_intensity=self.config.min_intensity,
-                remove_precursor_tol=self.config.remove_precursor_tol,
-                annotated=False,
+        folder_path = Path(folder)
+        hdf5_files = sorted(folder_path.glob("*.hdf5"))
+        for file_path in hdf5_files:
+            print(f"Processing file: {file_path.name}")
+            df = self.predict_one_file(str(file_path))
+            if output_folder:
+                out_dir = Path(output_folder)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                df.to_csv(out_dir / f"{file_path.stem}_result.csv", index=False)
+        return
+
+    def _predict_single_device(self, loader):
+        """predict using single device (cpu or cuda)"""
+        self.model.eval()
+        predict_result = []
+        with torch.no_grad():
+            for batch in tqdm(loader, desc="Inference..."):
+                batch = tuple(
+                    x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
+                )
+                batch_result = self.model.predict_step(batch)
+                predict_result.extend(batch_result)
+        return predict_result
+
+    def _predict_cpu_parallel(self, loader):  # noqa: C901
+        n_process = self.config.cpu_process
+        input_queue = mp.Queue(maxsize=n_process * 2)
+        output_queue = mp.Queue()
+        processes = []
+        sentinels_sent = False
+
+        for _ in range(n_process):
+            p = mp.Process(
+                target=worker_predict_step,
+                args=(input_queue, output_queue, self.model, self.device),
+                daemon=True,
             )
-            self.loaders.setup()
-            predict_result = []
-            predict_loader = self.loaders.get_test_loader()
-            self.model.eval()
-            with torch.no_grad():
-                for batch in tqdm(predict_loader):
-                    batch = tuple(
-                        x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
-                    )
-                    # self.model.predict_step(batch)
-                    predict_batch_table = self.model.predict_step(batch)
-                    predict_result.extend(predict_batch_table)
-            "测试速度时 跳过"
-            if predict_result:
-                all_merged = np.vstack(predict_result)
-                columns = ["spec_idx", "modified_sequence", "nar_dp_score", "nar_dp_top"]
-                df = pd.DataFrame(all_merged, columns=columns)
-                scored_top1_df, filtered_scored_top1_df = pGlyco_score.score_sequence(
-                    df, test_file_path
-                )
-                score_top_1_output_csv_path = (
-                    out_put_folder + "/" + test_file_path.stem + "_result.csv"
-                )
-                filtered_scored_top1_df.to_csv(score_top_1_output_csv_path, index=False)
+            p.start()
+            processes.append(p)
+
+        num_batches = len(loader)
+        predict_result = []
+        sent_count = 0
+        received_count = 0
+        loader_iter = iter(loader)
+
+        try:
+            with tqdm(
+                total=num_batches, desc="predicting (CPU parallel)...", leave=False, unit="batch"
+            ) as pbar:
+                while received_count < num_batches:
+                    while sent_count < num_batches and not input_queue.full():
+                        try:
+                            batch = next(loader_iter)
+                            input_queue.put(batch)
+                            sent_count += 1
+                        except StopIteration:
+                            break
+
+                    if sent_count == num_batches and not sentinels_sent:
+                        for _ in processes:
+                            while True:
+                                dead_workers = [
+                                    p.pid
+                                    for p in processes
+                                    if p.exitcode is not None and p.exitcode != 0
+                                ]
+                                if dead_workers:
+                                    raise RuntimeError(
+                                        "Prediction worker exited unexpectedly before sentinel shutdown: "
+                                        f"{dead_workers}"
+                                    )
+                                try:
+                                    input_queue.put(None, timeout=0.1)
+                                    break
+                                except queue.Full:
+                                    continue
+                        sentinels_sent = True
+
+                    dead_workers = [
+                        p.pid for p in processes if p.exitcode is not None and p.exitcode != 0
+                    ]
+                    if dead_workers:
+                        raise RuntimeError(
+                            f"Prediction worker exited unexpectedly before completion: {dead_workers}"
+                        )
+
+                    while received_count < sent_count:
+                        try:
+                            result = output_queue.get(timeout=0.01)
+                        except queue.Empty:
+                            if (
+                                sentinels_sent
+                                and not any(p.is_alive() for p in processes)
+                                and received_count < sent_count
+                            ):
+                                raise RuntimeError(
+                                    "Prediction workers exited before all queued batch results were received."
+                                ) from None
+                            break
+                        predict_result.extend(result)
+                        received_count += 1
+                        pbar.update(1)
+            for p in processes:
+                p.join()
+        except Exception:
+            for p in processes:
+                if p.is_alive():
+                    p.terminate()
+                p.join()
+            raise
+
+        return predict_result
 
     def initialize_model(self, mode=None):
         self.model = FoxNovoNARModel(
@@ -249,6 +345,9 @@ class ModelRunner:
 
         if mode == "predict":
             self.model = load_model_weight(self.model, self.model_filename)
+            if self.device.type == "cpu":
+                self.model.share_memory()
+                self.model.eval()
         else:
             if not self.config.train_scratch:
                 self.model = load_encoder_weight(self.model, self.model_filename)
@@ -275,6 +374,16 @@ class ModelRunner:
                     self.config.cosine_schedule_period_iters,
                 )
 
+    def _score_predictions(self, raw_results: list, hdf5_path: str) -> pd.DataFrame:
+        """model_predicted_results -> scored_results"""
+        if not raw_results:
+            return pd.DataFrame()
+        all_merged = np.vstack(raw_results)
+        columns = ["spec_idx", "modified_sequence", "nar_dp_score", "nar_dp_top"]
+        df = pd.DataFrame(all_merged, columns=columns)
+        _, filtered_df = pGlyco_score.score_sequence(df, hdf5_path)
+        return filtered_df
+
 
 def train(
     train_folder: str,
@@ -283,32 +392,41 @@ def train(
 ) -> None:
     mconfig = Config()
     config = mconfig.config
-    with ModelRunner(config, model) as runner:
-        print("Training model from:")
-        print(f"  {train_folder}")
-
-        print("Validating on:")
-        print(f"  {val_folder}")
-        runner.train(train_folder, val_folder)
+    runner = ModelRunner(config, model)
+    print("Training model from:")
+    print(f"  {train_folder}")
+    print("Validating on:")
+    print(f"  {val_folder}")
+    runner.train(train_folder, val_folder)
     print("Training Done")
 
 
 def predict(
     predict_folder: str,
     model: str | None,
-    out_put_folder=str,
+    output_folder: str,
 ) -> None:
     mconfig = Config()
     config = mconfig.config
-    with ModelRunner(config, model) as runner:
-        print("Predicting model from:")
-        print(f" {predict_folder}")
-        runner.predict(predict_folder, out_put_folder)
+    runner = ModelRunner(config, model)
+    print("Predicting model from:")
+    print(f" {predict_folder}")
+    runner.predict_batch(predict_folder, output_folder)
     print("Predicting Done")
 
 
-# predict(
-#     predict_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     out_put_folder=r"X:\chenzx\raw_Data\HLA\HLA_v1_2_all_data\HLA_v1_2_unseen\hdf_by_alpharaw\predict_result_v2_simple_mod_max_recall_0301\test_dp\hdf_test",
-#     model=r"X:\chenzx\raw_Data\HLA\HLA_v2_all_data\trained_weights\FeNNetNovo_HLA_v2_SOTA_simple_mod_500psm_max_recall_0301.ckpt",
-# )
+if __name__ == "__main__":
+    start_time = time.time()
+    import torch.multiprocessing as mp
+
+    with contextlib.suppress(RuntimeError):
+        mp.set_start_method("spawn", force=True)
+
+    predict(
+        predict_folder=r"C:\czx\temp\test",
+        model=r"Z:\chenzx\from_hdd_large_260424\tool_code\FeNNetNovo_HLA_v2_simple_mod_500psm_SOTA_val1_recall_0.910.ckpt",
+        output_folder=r"C:\czx\temp\test",
+    )
+    print("All prediction done!")
+    end_time = time.time()
+    print("Time cost:", end_time - start_time)

@@ -147,8 +147,8 @@ class DeNovoDevAPI:
         if model_save_path:
             print(f"Model save path: {model_save_path}")
         print("=" * 70)
-        with ModelRunner(self.config.config, self.model_weights) as runner:
-            runner.train(train_folder, val_folder)
+        runner = ModelRunner(self.config.config, self.model_weights)  # noqa: F811
+        runner.train(train_folder, val_folder)
         print("=" * 70)
         print("TRAINING COMPLETED SUCCESSFULLY")
         print("=" * 70)
@@ -207,8 +207,9 @@ class DeNovoDevAPI:
         print("=" * 70)
         print("Output format: spec_idx, modified_sequence, nar_dp_score, nar_dp_top")
         print("=" * 70)
-        with ModelRunner(self.config.config, weights_to_use) as runner:
-            runner.predict(predict_folder, str(output_folder))
+        runner = ModelRunner(self.config.config, weights_to_use)  # noqa: F811
+        print("devices=", self.config.config.device)
+        runner.predict_batch(predict_folder, output_folder)
         print("=" * 70)
         print("PREDICTION COMPLETED SUCCESSFULLY")
         print("=" * 70)
@@ -448,4 +449,10 @@ if __name__ == "__main__":
     # api = DeNovoDevAPI(model_weights="/path/to/model.ckpt")
     # api.train(train_folder="/path/to/train", val_folder="/path/to/val")
     # api.predict(predict_folder="/path/to/test", output_folder="/path/to/output")
+    import torch.multiprocessing as mp
+
+    try:  # noqa: SIM105
+        mp.set_start_method("spawn", force=True)  # 启动多进程
+    except RuntimeError:
+        pass
     sys.exit(main())

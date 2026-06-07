@@ -1,3 +1,4 @@
+import contextlib
 import os
 import random
 from dataclasses import dataclass, field
@@ -82,10 +83,11 @@ class Modelconfig:
     learning_rate: float = 0.0001
     weight_decay: float = 1e-5
     train_batch_size: int = 64
-    eval_batch_size: int = 128  # recommend 64 or 128
+    eval_batch_size: int = 256  # recommend 64 or 128
     max_epochs: int = 20
     device: str = "cpu"  # cpu or cuda, if None: try to get cuda
-    cpu_threads: int = 16  # work if using cpu
+    cpu_threads: int = 3  # work if using cpu, threads every process, all = m x n
+    cpu_process: int = 8  # work if using cpu
 
 
 @dataclass
@@ -101,8 +103,22 @@ class Config:
         except:  # noqa: E722
             self.device, self.device_str = get_default_device()
         if self.device_str == "cpu":
-            torch.set_num_threads(self.config.cpu_threads)
-            torch.set_num_interop_threads(self.config.cpu_threads)
+            threads = self.config.cpu_threads
+            torch.set_num_threads(threads)  # max thread of every process
+            with contextlib.suppress(RuntimeError):
+                torch.set_num_interop_threads(1)
+            torch.backends.mkldnn.enabled = True
+            torch.jit.enable_onednn_fusion(True)
+
+            try:
+                torch.backends.cuda.enable_flash_sdp(False)  # CPU不需要这个
+                torch.nn.functional.scaled_dot_product_attention  # SDPA  # noqa: B018
+            except:  # noqa: E722
+                pass
+
+            # 保持开启
+            torch.backends.openmp.enabled = True
+            torch.set_flush_denormal(True)  # 对处理谱图中小数值（denormals）很有帮助
 
 
 def seeding(seed):

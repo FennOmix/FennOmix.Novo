@@ -225,7 +225,7 @@ class FoxNovoNARModel(torch.nn.Module):
         mode: str = "train",
     ) -> torch.Tensor:
         pred, truth, raw_name, spec_idx, batch_score = self._forward_step(*batch)
-        peptide_recall = pep_recall_evaluate(pred, truth)
+        peptide_recall = pep_recall_evaluate(pred, truth, self.stop_token)
 
         "recall"
         dp_top10_recall = 0.0
