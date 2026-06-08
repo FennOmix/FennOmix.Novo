@@ -1,6 +1,10 @@
+import logging
+
 import torch
 
 from .foxnovo import FoxNovoNARModel
+
+logger = logging.getLogger(__name__)
 
 
 def load_encoder_weight(new_model: FoxNovoNARModel, pretrained_path: str) -> None:
@@ -30,7 +34,7 @@ def load_encoder_weight(new_model: FoxNovoNARModel, pretrained_path: str) -> Non
                 f"does not match current model ({new_model.encoder.dim_model})"
             )
     if unexpected_keys:
-        print(f"Unexpected keys while loading encoder weights: {unexpected_keys}")
+        logger.warning("Unexpected keys while loading encoder weights: %s", unexpected_keys)
     return new_model
 
 
@@ -71,7 +75,7 @@ def load_model_weight(new_model: FoxNovoNARModel, pretrained_path: str) -> None:
 
     missing_keys, unexpected_keys = new_model.load_state_dict(state, strict=False)
 
-    print(f"Loaded encoder weights from {pretrained_path}")
+    logger.info("Loaded encoder weights from %s", pretrained_path)
 
     critical_keys = [
         "encoder.tokenizer_encoder.int_mz_embedding.weight",
@@ -81,8 +85,8 @@ def load_model_weight(new_model: FoxNovoNARModel, pretrained_path: str) -> None:
 
     missing_critical = [k for k in missing_keys if k in critical_keys]
 
-    print(f"Missing keys: {missing_keys}")
-    print(f"Unexpected keys: {unexpected_keys}")
+    logger.info("Missing keys: %s", missing_keys)
+    logger.info("Unexpected keys: %s", unexpected_keys)
 
     if missing_critical:
         raise RuntimeError(f"Critical weights NOT loaded: {missing_critical}")

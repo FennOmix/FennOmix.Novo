@@ -18,9 +18,12 @@ Usage:
 """
 
 import argparse
+import logging
 import sys
 import warnings
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class DeNovoDevAPI:
@@ -132,27 +135,27 @@ class DeNovoDevAPI:
             else:
                 warnings.warn(f"Unknown configuration parameter: {key}", UserWarning, stacklevel=2)
         # Train model
-        print("=" * 70)
-        print("DENOVO DEV MODEL TRAINING")
-        print("=" * 70)
-        print(f"Training folder: {train_folder}")
-        print(f"Validation folder: {val_folder}")
-        print(f"Batch size: {batch_size}")
-        print(f"Max epochs: {max_epochs}")
-        print(f"Learning rate: {learning_rate}")
-        print(f"Train from scratch: {train_scratch}")
-        print(f"Use weighted sampling: {use_weighted_sample}")
-        print(f"Use weighted scoring: {use_weighted_score}")
+        logger.info("=" * 70)
+        logger.info("DENOVO DEV MODEL TRAINING")
+        logger.info("=" * 70)
+        logger.info("Training folder: %s", train_folder)
+        logger.info("Validation folder: %s", val_folder)
+        logger.info("Batch size: %s", batch_size)
+        logger.info("Max epochs: %s", max_epochs)
+        logger.info("Learning rate: %s", learning_rate)
+        logger.info("Train from scratch: %s", train_scratch)
+        logger.info("Use weighted sampling: %s", use_weighted_sample)
+        logger.info("Use weighted scoring: %s", use_weighted_score)
         if model_save_path:
-            print(f"Model save path: {model_save_path}")
-        print("=" * 70)
+            logger.info("Model save path: %s", model_save_path)
+        logger.info("=" * 70)
         from foxnovo.model.denovo import ModelRunner
 
         runner = ModelRunner(self.config.config, self.model_weights)  # noqa: F811
         runner.train(train_folder, val_folder)
-        print("=" * 70)
-        print("TRAINING COMPLETED SUCCESSFULLY")
-        print("=" * 70)
+        logger.info("=" * 70)
+        logger.info("TRAINING COMPLETED SUCCESSFULLY")
+        logger.info("=" * 70)
 
     def predict(
         self,
@@ -199,23 +202,23 @@ class DeNovoDevAPI:
         output_path = Path(output_folder)
         output_path.mkdir(parents=True, exist_ok=True)
         # Run prediction
-        print("=" * 70)
-        print("DENOVO DEV MODEL PREDICTION")
-        print("=" * 70)
-        print(f"Prediction folder: {predict_folder}")
-        print(f"Output folder: {output_folder}")
-        print(f"Model weights: {weights_to_use}")
-        print("=" * 70)
-        print("Output format: spec_idx, modified_sequence, nar_dp_score, nar_dp_top")
-        print("=" * 70)
+        logger.info("=" * 70)
+        logger.info("DENOVO DEV MODEL PREDICTION")
+        logger.info("=" * 70)
+        logger.info("Prediction folder: %s", predict_folder)
+        logger.info("Output folder: %s", output_folder)
+        logger.info("Model weights: %s", weights_to_use)
+        logger.info("=" * 70)
+        logger.info("Output format: spec_idx, modified_sequence, nar_dp_score, nar_dp_top")
+        logger.info("=" * 70)
         from foxnovo.model.denovo import ModelRunner
 
         runner = ModelRunner(self.config.config, weights_to_use)  # noqa: F811
-        print("devices=", self.config.config.device)
+        logger.info("devices=%s", self.config.config.device)
         runner.predict_batch(predict_folder, output_folder)
-        print("=" * 70)
-        print("PREDICTION COMPLETED SUCCESSFULLY")
-        print("=" * 70)
+        logger.info("=" * 70)
+        logger.info("PREDICTION COMPLETED SUCCESSFULLY")
+        logger.info("=" * 70)
 
 
 # Convenience functions for quick usage
@@ -378,10 +381,10 @@ def cli_train(args: argparse.Namespace) -> int:
         )
         return 0
     except FileNotFoundError as e:
-        print(f"❌ Error: {e}", file=sys.stderr)
+        logger.error("Error: %s", e)
         return 1
     except Exception as e:
-        print(f"❌ Training failed with error: {e}", file=sys.stderr)
+        logger.exception("Training failed with error: %s", e)
         return 1
 
 
@@ -395,18 +398,19 @@ def cli_predict(args: argparse.Namespace) -> int:
         )
         return 0
     except FileNotFoundError as e:
-        print(f"❌ Error: {e}", file=sys.stderr)
+        logger.error("Error: %s", e)
         return 1
     except ValueError as e:
-        print(f"❌ Error: {e}", file=sys.stderr)
+        logger.error("Error: %s", e)
         return 1
     except Exception as e:
-        print(f"❌ Prediction failed with error: {e}", file=sys.stderr)
+        logger.exception("Prediction failed with error: %s", e)
         return 1
 
 
 def main() -> int:
     """Main entry point for the CLI."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     parser = create_parser()
     args = parser.parse_args()
     if not args.command:
@@ -417,7 +421,7 @@ def main() -> int:
     elif args.command == "predict":
         return cli_predict(args)
     else:
-        print(f"Unknown command: {args.command}", file=sys.stderr)
+        logger.error("Unknown command: %s", args.command)
         return 1
 
 
