@@ -39,6 +39,17 @@ foxnovo predict \
   --model-weights /path/to/model.ckpt
 ```
 
+## Local Smoke Test
+
+This is a local-only check for manual validation before committing. It is not intended for pytest or CI.
+
+```bash
+python scripts/local_smoke_predict.py \
+  --predict-folder ./local_data/predict_hdf5 \
+  --model-weights ./local_data/model.ckpt \
+  --output-folder ./local_data/smoke_output
+```
+
 ## Python API
 
 ```python

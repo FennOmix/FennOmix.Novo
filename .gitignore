@@ -209,6 +209,10 @@ __marimo__/
 
 # Local test artifacts
 local_test/
+local_data/
+*.ckpt
+*.pt
+*.pth
 
 # vscode
 .vscode/
