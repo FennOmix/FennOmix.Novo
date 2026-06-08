@@ -4,13 +4,17 @@
 
 ## Installation
 
-Install the package in editable mode from the repository root:
+Install the local runtime dependencies first:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then install the package in editable mode from the repository root:
 
 ```bash
 pip install -e .
 ```
-
-Install optional ML dependencies as needed for your environment. GPU execution requires a compatible PyTorch build and CUDA setup.
 
 ## Input Data
 

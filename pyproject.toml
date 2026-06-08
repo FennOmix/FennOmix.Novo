@@ -45,14 +45,18 @@ ml = [
     "numba",
     "spectrum_utils",
     "alphabase",
+    "neptune",
+    "peptdeep",
 ]
 
 ml-cpu = [
-    "torch==2.9.1+cpu",
+    "torch",
     "einops",
     "numba",
     "spectrum_utils",
     "alphabase",
+    "neptune",
+    "peptdeep",
 ]
 
 tests = [
