@@ -3,6 +3,7 @@ import re
 import torch
 import torch.nn.functional as F
 
+from foxnovo.constants import STOP_TOKEN
 from foxnovo.decoders.dp_decoder import DP_Decoder
 from foxnovo.decoders.peptide_decoder import PeptideNARDecoder
 from foxnovo.encoders.spectrum_encoder import SpectrumEncoder
@@ -84,10 +85,10 @@ class FoxNovoNARModel(torch.nn.Module):
         self.precursor_mass_tol = precursor_mass_tol
         self.precursor_mass_ppm = precursor_mass_ppm
         self._peptide_mass = PeptideMass(residues=residues)
-        self._amino_acids = list(self._peptide_mass.masses.keys()) + ["$"]
+        self._amino_acids = list(self._peptide_mass.masses.keys()) + [STOP_TOKEN]
         self._aa2idx = {aa: i + 1 for i, aa in enumerate(self._amino_acids)}
         self._idx2aa = {i: aa for aa, i in self._aa2idx.items()}
-        self.stop_token = self._aa2idx["$"]
+        self.stop_token = self._aa2idx[STOP_TOKEN]
         self.dp_decoder = DP_Decoder(
             residues=residues,
             top_k=self.top_k,
@@ -158,7 +159,7 @@ class FoxNovoNARModel(torch.nn.Module):
         sequence = re.split(r"(?<=.)(?=[A-Z])", sequence)
 
         if not partial:
-            sequence += ["$"]
+            sequence += [STOP_TOKEN]
 
         tokens = [self._aa2idx[aa] for aa in sequence]
         tokens = torch.tensor(tokens, device=self.decoder.device)

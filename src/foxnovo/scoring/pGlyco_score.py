@@ -9,6 +9,8 @@ from alphabase.peptide.fragment import create_fragment_mz_dataframe
 from alphabase.peptide.precursor import refine_precursor_df
 from peptdeep.mass_spec.match import match_one_raw_with_numba
 
+from foxnovo.constants import WATER_MASS
+
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
@@ -183,7 +185,7 @@ class DenovoSequenceScoring:
             "M+15.995": 147.035400,
             "C+119.004": 222.014,
         }
-        self.WATER_MW = 18.01056
+        self.WATER_MW = WATER_MASS
         self.sorted_aas = sorted(self.aa2mass.keys(), key=len, reverse=True)
         self.max_aa_len = max(len(aa) for aa in self.aa2mass)
         "-------------肽段分子量计算------------"

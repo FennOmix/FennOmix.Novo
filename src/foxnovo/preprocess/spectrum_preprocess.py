@@ -1,10 +1,12 @@
 import numpy as np
 
+from foxnovo.constants import ISOTOPE_MASS_DIFF, PROTON_MASS
+
 
 # 模拟AtomLib类（C#中的AtomLib.MassProton和MassIsotope）
 class AtomLib:
-    MassProton = 1.007276466879  # 质子质量
-    MassIsotope = 1.0033548378  # 同位素质量差（C13-C12）
+    MassProton = PROTON_MASS  # 质子质量
+    MassIsotope = ISOTOPE_MASS_DIFF  # 同位素质量差（C13-C12）
 
 
 class Preprocess:
