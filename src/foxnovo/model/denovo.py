@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import os
 import queue
 import time
@@ -21,6 +22,8 @@ from foxnovo.scoring import pGlyco_score
 
 with contextlib.suppress(RuntimeError):
     mp.set_start_method("spawn", force=True)
+
+logger = logging.getLogger(__name__)
 
 
 class ModelRunner:
@@ -76,9 +79,9 @@ class ModelRunner:
         train_eval_loader = self.loaders.get_train_eval_loader()  # eval
 
         num_epochs = self.config.max_epochs
-        print("model_save_path:", self.model_save_path)
+        logger.info("model_save_path: %s", self.model_save_path)
         for epoch in range(num_epochs):
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
+            logger.info("Epoch %s/%s", epoch + 1, num_epochs)
             self.model.train()
             train_losses = []
             epoch_loss = 0
@@ -131,10 +134,18 @@ class ModelRunner:
                     + ".ckpt"
                 )
                 torch.save(self.model.state_dict(), model_save_path)
-            print(
-                f"Epoch {epoch + 1}: Train Loss = {epoch_loss:.4f}, "
-                f"Train Eval Loss = {train_eval_loss:.4f}, Train Eval Top1 Recall = {train_eval_recall:.3f}, Train Eval Top10 Recall = {train_eval_dp_recall:.3f}, "
-                f"Val Loss = {val_loss:.4f}, Val Top1 Recall = {top1_val_peptide_recall:.3f}, Val Top10 Recall = {val_dp_recall:.3f}"
+            logger.info(
+                "Epoch %s: Train Loss = %.4f, Train Eval Loss = %.4f, "
+                "Train Eval Top1 Recall = %.3f, Train Eval Top10 Recall = %.3f, "
+                "Val Loss = %.4f, Val Top1 Recall = %.3f, Val Top10 Recall = %.3f",
+                epoch + 1,
+                epoch_loss,
+                train_eval_loss,
+                train_eval_recall,
+                train_eval_dp_recall,
+                val_loss,
+                top1_val_peptide_recall,
+                val_dp_recall,
             )
             run["train/epoch_loss"].log(epoch_loss)
             run["val/epoch_loss"].log(val_loss)
@@ -206,7 +217,7 @@ class ModelRunner:
         folder_path = Path(folder)
         hdf5_files = sorted(folder_path.glob("*.hdf5"))
         for file_path in hdf5_files:
-            print(f"Processing file: {file_path.name}")
+            logger.info("Processing file: %s", file_path.name)
             df = self.predict_one_file(str(file_path))
             if output_folder:
                 out_dir = Path(output_folder)
@@ -362,7 +373,7 @@ class ModelRunner:
                     self.config.cosine_schedule_period_iters,
                 )
             else:
-                print("Training from scratch...")
+                logger.info("Training from scratch...")
                 self.optimizer = torch.optim.AdamW(
                     self.model.parameters(),
                     lr=self.config.learning_rate,
@@ -393,12 +404,10 @@ def train(
     mconfig = Config()
     config = mconfig.config
     runner = ModelRunner(config, model)
-    print("Training model from:")
-    print(f"  {train_folder}")
-    print("Validating on:")
-    print(f"  {val_folder}")
+    logger.info("Training model from:\n  %s", train_folder)
+    logger.info("Validating on:\n  %s", val_folder)
     runner.train(train_folder, val_folder)
-    print("Training Done")
+    logger.info("Training Done")
 
 
 def predict(
@@ -409,10 +418,9 @@ def predict(
     mconfig = Config()
     config = mconfig.config
     runner = ModelRunner(config, model)
-    print("Predicting model from:")
-    print(f" {predict_folder}")
+    logger.info("Predicting model from:\n %s", predict_folder)
     runner.predict_batch(predict_folder, output_folder)
-    print("Predicting Done")
+    logger.info("Predicting Done")
 
 
 if __name__ == "__main__":
@@ -427,6 +435,6 @@ if __name__ == "__main__":
         model="./example_data/model.ckpt",
         output_folder="./example_output",
     )
-    print("All prediction done!")
+    logger.info("All prediction done!")
     end_time = time.time()
-    print("Time cost:", end_time - start_time)
+    logger.info("Time cost: %s", end_time - start_time)
