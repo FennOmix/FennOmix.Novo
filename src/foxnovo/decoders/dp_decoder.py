@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from numba import njit
 
 from foxnovo.constants import WATER_MASS
-from foxnovo.depthcharge.masses import PeptideMass  # 后期单独处理
+from foxnovo.model.utils import PeptideMass
 
 WATER_MW = WATER_MASS
 
