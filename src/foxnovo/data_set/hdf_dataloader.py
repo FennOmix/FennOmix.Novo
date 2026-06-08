@@ -11,6 +11,8 @@ from alphabase.io.hdf import HDF_File
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
+from foxnovo.constants import HYDROGEN_MASS, ISOTOPE_MASS_DIFF, PROTON_MASS
+
 
 def _remove_precursor_numpy(mz: np.ndarray, remove_mz: np.ndarray, tol: float):
     """
@@ -303,8 +305,8 @@ class HDFSpectrumDataset(Dataset):
         n_peaks = self.n_peaks
         tol = self.remove_precursor_tol
 
-        adduct_mass = 1.007825
-        c_mass_diff = 1.003355
+        adduct_mass = HYDROGEN_MASS
+        c_mass_diff = ISOTOPE_MASS_DIFF
         isotope = 0
 
         mz = mz_array.astype(np.float64, copy=False)
@@ -438,8 +440,8 @@ class AnnotatedHDFSpectrumDataset(Dataset):
         n_peaks = self.n_peaks
         tol = self.remove_precursor_tol
 
-        adduct_mass = 1.007825
-        c_mass_diff = 1.003355
+        adduct_mass = HYDROGEN_MASS
+        c_mass_diff = ISOTOPE_MASS_DIFF
         isotope = 0
 
         mz = mz_array.astype(np.float64, copy=False)
@@ -542,7 +544,7 @@ def prepare_batch(batch):
     spectra = pad_sequence(spectra, batch_first=True)
     precursor_mzs = torch.tensor(precursor_mzs)
     precursor_charges = torch.tensor(precursor_charges)
-    precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
+    precursor_masses = (precursor_mzs - PROTON_MASS) * precursor_charges
     precursors = torch.vstack([precursor_masses, precursor_charges, precursor_mzs]).T.float()
 
     if is_annotated:

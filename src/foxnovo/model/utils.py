@@ -2,13 +2,15 @@ import re
 
 import torch
 
+from foxnovo.constants import HYDROGEN_MASS, OXYGEN_MASS, PROTON_MASS
+
 
 class PeptideMass:
     # Constants
-    hydrogen = 1.007825035
-    oxygen = 15.99491463
+    hydrogen = HYDROGEN_MASS
+    oxygen = OXYGEN_MASS
     h2o = 2 * hydrogen + oxygen
-    proton = 1.00727646688
+    proton = PROTON_MASS
 
     def __init__(self, residues: dict[str, float]):
         if not isinstance(residues, dict):
