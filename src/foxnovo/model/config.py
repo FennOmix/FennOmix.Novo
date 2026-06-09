@@ -6,6 +6,38 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
+AA_MASS = {
+    "G": 57.021464,
+    "A": 71.037114,
+    "S": 87.032028,
+    "P": 97.052764,
+    "V": 99.068414,
+    "T": 101.047670,
+    "C+57.021": 160.030649,
+    "L": 113.084064,
+    "I": 113.084064,
+    "C": 103.009649,
+    "N": 114.042927,
+    "D": 115.026943,
+    "Q": 128.058578,
+    "K": 128.094963,
+    "E": 129.042593,
+    "M": 131.040485,
+    "H": 137.058912,
+    "F": 147.068414,
+    "R": 156.101111,
+    "Y": 163.063329,
+    "W": 186.079313,
+    "M+15.995": 147.035400,
+    "C+119.004": 222.014,
+}
+
+MOD_TO_AA_TOKEN = {
+    "Carbamidomethyl@C": "C+57.021",
+    "Oxidation@M": "M+15.995",
+    "Cysteinyl@C": "C+119.004",
+}
+
 
 def get_default_device():
     """Pick GPU if available, else CPU"""
@@ -49,33 +81,7 @@ class ModelConfig:
     n_layers: int = 9
     dropout: float = 0.1
     dim_intensity: int | None = None
-    residues: dict[str, float] = field(
-        default_factory=lambda: {
-            "G": 57.021464,
-            "A": 71.037114,
-            "S": 87.032028,
-            "P": 97.052764,
-            "V": 99.068414,
-            "T": 101.047670,
-            "C+57.021": 160.030649,
-            "L": 113.084064,
-            "I": 113.084064,
-            "C": 103.009649,
-            "N": 114.042927,
-            "D": 115.026943,
-            "Q": 128.058578,
-            "K": 128.094963,
-            "E": 129.042593,
-            "M": 131.040485,
-            "H": 137.058912,
-            "F": 147.068414,
-            "R": 156.101111,
-            "Y": 163.063329,
-            "W": 186.079313,
-            "M+15.995": 147.035400,
-            "C+119.004": 222.014,
-        }
-    )
+    residues: dict[str, float] = field(default_factory=AA_MASS.copy)
     train_label_smoothing: float = 0.01
     model_save_path: str = ""
     warmup_iters: int = 100_000

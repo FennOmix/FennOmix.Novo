@@ -1,4 +1,5 @@
 import gc
+import logging
 import random
 from collections import Counter
 from pathlib import Path
@@ -12,6 +13,9 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from foxnovo.constants import HYDROGEN_MASS, ISOTOPE_MASS_DIFF, PROTON_MASS
+from foxnovo.model.config import MOD_TO_AA_TOKEN
+
+logger = logging.getLogger(__name__)
 
 
 def _remove_precursor_numpy(mz: np.ndarray, remove_mz: np.ndarray, tol: float):
@@ -24,7 +28,7 @@ def _remove_precursor_numpy(mz: np.ndarray, remove_mz: np.ndarray, tol: float):
     return mask
 
 
-mode2mass = {"Carbamidomethyl@C": "C+57.021", "Oxidation@M": "M+15.995", "Cysteinyl@C": "C+119.004"}
+mod_to_aa_token = MOD_TO_AA_TOKEN
 ignore_mod = []
 
 allow_ignore_mod_num = 1
@@ -199,7 +203,7 @@ class AnnotatedHDFParser:
             ]
             peak_df = f.ms_data.peak_df.values
             mod_seqs = build_mod_seq(
-                df["sequence"], df["mods"], df["mod_sites"], mod_dict=mode2mass
+                df["sequence"], df["mods"], df["mod_sites"], mod_dict=mod_to_aa_token
             )
 
             charges.extend(df["charge"].values.astype(np.int8))
@@ -677,30 +681,32 @@ class DeNovoDataModule:
             self.train_dataset = dataset_cls(self.train_folder, **self.dataset_kwargs)
             self._create_train_eval_subset()
             if self.weighted_sample:
-                print("Sample_weighted based on charge_modified_sequence......")
+                logger.info("Sample_weighted based on charge_modified_sequence......")
                 self.sampler = WeightedRandomSampler(
                     self.train_dataset.dataparser.peptide_weights,
                     num_samples=len(self.train_dataset.dataparser.peptide_weights),
                     replacement=True,
                 )
             elif self.chunked_weighted_sample:
-                print("Chunked_sample_weighted based on charge_modified_sequence......")
+                logger.info("Chunked_sample_weighted based on charge_modified_sequence......")
                 self.sampler = ChunkedWeightedSampler(
                     self.train_dataset.dataparser.peptide_weights,
                     num_samples=len(self.train_dataset.dataparser.peptide_weights),
                     chunk_size=10000000,
                     replacement=True,
                 )
-            print("Training dataset initialized with", len(self.train_dataset), "spectra")
-            print(f"Fixed train eval subset created with {len(self.train_eval_dataset)} spectra")
+            logger.info("Training dataset initialized with %s spectra", len(self.train_dataset))
+            logger.info(
+                "Fixed train eval subset created with %s spectra", len(self.train_eval_dataset)
+            )
 
         if self.val_folder is not None:
             self.valid_dataset = dataset_cls(self.val_folder, **self.dataset_kwargs)
-            print("Validation dataset initialized with", len(self.valid_dataset), "spectra")
+            logger.info("Validation dataset initialized with %s spectra", len(self.valid_dataset))
 
         if self.test_path is not None:
             self.test_dataset = dataset_cls(self.test_path, **self.dataset_kwargs)
-            print("Test dataset initialized with", len(self.test_dataset), "spectra")
+            logger.info("Test dataset initialized with %s spectra", len(self.test_dataset))
 
     def get_loader(self, dataset, batch_size, shuffle=False, sampler=None):
         def worker_init_fn(worker_id):
