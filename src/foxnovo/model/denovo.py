@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import os
 import queue
@@ -20,10 +19,12 @@ from foxnovo.model.scheduler import CosineWarmupScheduler
 from foxnovo.model.utils import worker_predict_step
 from foxnovo.scoring import pGlyco_score
 
-with contextlib.suppress(RuntimeError):
-    mp.set_start_method("spawn", force=True)
-
 logger = logging.getLogger(__name__)
+
+
+def setup_multiprocessing(start_method: str = "spawn") -> None:
+    if mp.get_start_method(allow_none=True) is None:
+        mp.set_start_method(start_method)
 
 
 class ModelRunner:
@@ -213,6 +214,8 @@ class ModelRunner:
         input: folder path with hdf5 files
         output: for each hdf5 file, one csv file with peak_ion_match_score
         """
+        if self.device.type == "cpu" and self.config.cpu_process > 1:
+            setup_multiprocessing()
         self.initialize_model(mode="predict")
         folder_path = Path(folder)
         hdf5_files = sorted(folder_path.glob("*.hdf5"))
@@ -427,11 +430,6 @@ def predict(
 
 if __name__ == "__main__":
     start_time = time.time()
-    import torch.multiprocessing as mp
-
-    with contextlib.suppress(RuntimeError):
-        mp.set_start_method("spawn", force=True)
-
     predict(
         predict_folder="./example_data/predict",
         model="./example_data/model.ckpt",

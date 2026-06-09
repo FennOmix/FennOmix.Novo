@@ -460,10 +460,8 @@ if __name__ == "__main__":
     # api = DeNovoDevAPI(model_weights="/path/to/model.ckpt")
     # api.train(train_folder="/path/to/train", val_folder="/path/to/val")
     # api.predict(predict_folder="/path/to/test", output_folder="/path/to/output")
-    import torch.multiprocessing as mp
+    if len(sys.argv) > 1 and sys.argv[1] == "predict":
+        from foxnovo.model.denovo import setup_multiprocessing
 
-    try:  # noqa: SIM105
-        mp.set_start_method("spawn", force=True)  # 启动多进程
-    except RuntimeError:
-        pass
+        setup_multiprocessing()
     sys.exit(main())
