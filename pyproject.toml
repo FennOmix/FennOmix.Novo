@@ -25,7 +25,13 @@ dependencies = [
     "tqdm",
     "h5py",
     "pyteomics",
-    # Note: heavy ML/perf packages moved to optional extras below to keep CI installs small
+    "torch",
+    "einops",
+    "numba",
+    "spectrum_utils",
+    "alphabase",
+    "neptune",
+    "peptdeep",
 ]
 
 [project.optional-dependencies]

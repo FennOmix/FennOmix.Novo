@@ -1,10 +1,13 @@
 import contextlib
+import logging
 import os
 import random
 from dataclasses import dataclass, field
 
 import numpy as np
 import torch
+
+logger = logging.getLogger(__name__)
 
 AA_MASS = {
     "G": 57.021464,
@@ -91,7 +94,9 @@ class ModelConfig:
     train_batch_size: int = 64
     eval_batch_size: int = 256  # recommend 64 or 128
     max_epochs: int = 20
-    device: str = "cuda"  # cpu or cuda, if None: try to get cuda
+    device: str = field(
+        default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu"
+    )  # cpu or cuda
     cpu_threads: int = 3  # work if using cpu, threads every process, all = m x n
     cpu_process: int = 8  # work if using cpu
 
@@ -105,9 +110,14 @@ class Config:
     def __post_init__(self):
         try:
             self.device_str = self.config.device
+            if self.device_str == "cuda" and not torch.cuda.is_available():
+                logger.warning("CUDA was requested but is unavailable; falling back to CPU.")
+                self.device_str = "cpu"
+                self.config.device = "cpu"
             self.device = torch.device(self.device_str)
         except:  # noqa: E722
             self.device, self.device_str = get_default_device()
+            self.config.device = self.device_str
 
 
 def seed_everything(seed: int) -> None:
