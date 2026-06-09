@@ -4,7 +4,7 @@ import einops
 import numpy as np
 import torch
 
-"""same with depthcharge.components.encoders"""
+"""Shared encoder utilities used by FoxNovo models."""
 
 """Simple encoders for input into Transformers and the like."""
 

@@ -8,7 +8,7 @@ inference from mass spectrometry data.
 # Core model (FoxNovo)
 from .checkpoint import load_encoder_weight, load_model_weight
 
-# Configuration
+# Configuration (`Modelconfig` is kept as a backward-compatible alias).
 from .config import Config, ModelConfig, Modelconfig, get_default_device, seeding
 
 # Training & Inference (de novo methodology)

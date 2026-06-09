@@ -12,9 +12,9 @@ Key features:
 
 Usage:
     # Train
-    python -m foxnovo.api_denovo_dev train --train-folder /path/to/train --val-folder /path/to/val
+    foxnovo train --train-folder /path/to/train --val-folder /path/to/val
     # Predict
-    python -m foxnovo.api_denovo_dev predict --predict-folder /path/to/test --output-folder /path/to/output --model-weights /path/to/model.ckpt
+    foxnovo predict --predict-folder /path/to/test --output-folder /path/to/output --model-weights /path/to/model.ckpt
 """
 
 import argparse
@@ -38,12 +38,13 @@ class DeNovoDevAPI:
     - Training the model on new data
     - Making predictions on MS/MS spectra
     Examples:
-        >>> api = DeNovoDevAPI()
-        >>> api.train(
+        >>> from foxnovo.api import train
+        >>> train(
         ...     train_folder="/path/to/train",
         ...     val_folder="/path/to/val",
         ... )
-        >>> api.predict(
+        >>> from foxnovo.api import predict
+        >>> predict(
         ...     predict_folder="/path/to/test",
         ...     output_folder="/path/to/output",
         ...     model_weights="/path/to/model.ckpt",
@@ -84,33 +85,33 @@ class DeNovoDevAPI:
         **kwargs,
     ) -> None:
         """
-        Train the DeNovo Dev model on new data.
-        Args:
-            train_folder (str): Path to training data folder containing HDF5 files.
-            val_folder (str): Path to validation data folder containing HDF5 files.
-            model_save_path (Optional[str]): Path where to save the trained model.
-                If None, uses default path from config.
-            batch_size (int): Training batch size. Default: 64.
-            max_epochs (int): Maximum number of epochs to train. Default: 20.
-            learning_rate (float): Initial learning rate. Default: 0.0001.
-            train_scratch (bool): Train from scratch or fine-tune pre-trained encoder. Default: True.
-            use_weighted_sample (bool): Use weighted sampling for long-tail data. Default: True.
-            use_weighted_score (bool): Use weighted scoring for low-quality spectra. Default: True.
-            **kwargs: Additional keyword arguments for model configuration.
-        Returns:
-            None
-        Raises:
-            FileNotFoundError: If train_folder or val_folder don't exist.
+            Train the DeNovo Dev model on new data.
+            Args:
+                train_folder (str): Path to training data folder containing HDF5 files.
+                val_folder (str): Path to validation data folder containing HDF5 files.
+                model_save_path (Optional[str]): Path where to save the trained model.
+                    If None, uses default path from config.
+                batch_size (int): Training batch size. Default: 64.
+                max_epochs (int): Maximum number of epochs to train. Default: 20.
+                learning_rate (float): Initial learning rate. Default: 0.0001.
+                train_scratch (bool): Train from scratch or fine-tune pre-trained encoder. Default: True.
+                use_weighted_sample (bool): Use weighted sampling for long-tail data. Default: True.
+                use_weighted_score (bool): Use weighted scoring for low-quality spectra. Default: True.
+                **kwargs: Additional keyword arguments for model configuration.
+            Returns:
+                None
+            Raises:
+                FileNotFoundError: If train_folder or val_folder don't exist.
         Examples:
-            >>> api = DeNovoDevAPI()
-            >>> api.train(
+            >>> from foxnovo.api import train
+            >>> train(
             ...     train_folder="/data/train",
             ...     val_folder="/data/val",
             ...     model_save_path="/models/trained_model.ckpt",
-            ...     batch_size=32,
-            ...     max_epochs=50,
-            ...     use_weighted_sample=True,
-            ... )
+                ...     batch_size=32,
+                ...     max_epochs=50,
+                ...     use_weighted_sample=True,
+                ... )
         """
         # Validate input paths
         train_path = Path(train_folder)
@@ -166,27 +167,28 @@ class DeNovoDevAPI:
         model_weights: str | None = None,
     ) -> None:
         """
-        Run prediction on MS/MS spectra using the DeNovo Dev model.
-        The DeNovo Dev model uses a dual decoder system (NAR + DP) and provides:
-        - Modified sequence predictions
-        - NAR-DP scores
-        - Top-10 DP predictions
-        - Filtered results based on scoring
-        Args:
-            predict_folder (str): Path to folder containing HDF5 files for prediction.
-            output_folder (str): Path where to save prediction results as CSV files.
-            model_weights (Optional[str]): Path to model weights to use for prediction.
-                If None, uses weights provided during initialization.
-        Returns:
-            None
-        Raises:
-            FileNotFoundError: If predict_folder doesn't exist.
-            ValueError: If no model weights are specified.
+            Run prediction on MS/MS spectra using the DeNovo Dev model.
+            The DeNovo Dev model uses a dual decoder system (NAR + DP) and provides:
+            - Modified sequence predictions
+            - NAR-DP scores
+            - Top-10 DP predictions
+            - Filtered results based on scoring
+            Args:
+                predict_folder (str): Path to folder containing HDF5 files for prediction.
+                output_folder (str): Path where to save prediction results as CSV files.
+                model_weights (Optional[str]): Path to model weights to use for prediction.
+                    If None, uses weights provided during initialization.
+            Returns:
+                None
+            Raises:
+                FileNotFoundError: If predict_folder doesn't exist.
+                ValueError: If no model weights are specified.
         Examples:
-            >>> api = DeNovoDevAPI(model_weights="/models/trained_model.ckpt")
-            >>> api.predict(
+            >>> from foxnovo.api import predict
+            >>> predict(
             ...     predict_folder="/data/test_spectra",
             ...     output_folder="/results/predictions",
+            ...     model_weights="/models/trained_model.ckpt",
             ... )
         """
         # Validate input path
@@ -235,7 +237,7 @@ def train(train_folder: str, val_folder: str, model_weights: str | None = None, 
         model_weights (Optional[str]): Path to pre-trained model weights.
         **kwargs: Additional arguments passed to DeNovoDevAPI.train()
     Examples:
-        >>> from foxnovo.api_denovo_dev import train
+        >>> from foxnovo.api import train
         >>> train(
         ...     train_folder="/data/train",
         ...     val_folder="/data/val",
@@ -258,7 +260,7 @@ def predict(
         output_folder (str): Path to save results.
         model_weights (str): Path to model weights.
     Examples:
-        >>> from foxnovo.api_denovo_dev import predict
+        >>> from foxnovo.api import predict
         >>> predict(
         ...     predict_folder="/data/test",
         ...     output_folder="/results",
@@ -435,7 +437,7 @@ if __name__ == "__main__":
     # Uncomment to test as CLI:
     #
     # Train (from scratch):
-    #   python api_denovo_dev.py train \
+    #   foxnovo train \
     #       --train-folder /path/to/train \
     #       --val-folder /path/to/val \
     #       --batch-size 64 \
@@ -443,23 +445,23 @@ if __name__ == "__main__":
     #       --train-scratch
     #
     # Train (fine-tune):
-    #   python api_denovo_dev.py train \
+    #   foxnovo train \
     #       --train-folder /path/to/train \
     #       --val-folder /path/to/val \
     #       --model-weights /path/to/pretrained.ckpt \
     #       --no-train-scratch
     #
     # Predict:
-    #   python api_denovo_dev.py predict \
+    #   foxnovo predict \
     #       --predict-folder /path/to/test \
     #       --output-folder /path/to/output \
     #       --model-weights /path/to/model.ckpt
     #
     # ============================================================
     # Or use programmatically:
-    # api = DeNovoDevAPI(model_weights="/path/to/model.ckpt")
-    # api.train(train_folder="/path/to/train", val_folder="/path/to/val")
-    # api.predict(predict_folder="/path/to/test", output_folder="/path/to/output")
+    # from foxnovo.api import train, predict
+    # train(train_folder="/path/to/train", val_folder="/path/to/val")
+    # predict(predict_folder="/path/to/test", output_folder="/path/to/output", model_weights="/path/to/model.ckpt")
     if len(sys.argv) > 1 and sys.argv[1] == "predict":
         from foxnovo.model.denovo import setup_multiprocessing
 

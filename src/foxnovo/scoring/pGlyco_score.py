@@ -1,3 +1,4 @@
+import logging
 import re
 import warnings
 
@@ -12,6 +13,7 @@ from peptdeep.mass_spec.match import match_one_raw_with_numba
 from foxnovo.constants import WATER_MASS
 from foxnovo.model.config import AA_MASS, MOD_TO_AA_TOKEN
 
+logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
@@ -127,7 +129,7 @@ class DenovoSequenceScoring:
         try:
             self.spectra_df = f.ms_data.spectrum_df.values[
                 [
-                    "precursor_charge",
+                    "charge",
                     "peak_start_idx",
                     "peak_stop_idx",
                     "precursor_mz",
@@ -135,11 +137,11 @@ class DenovoSequenceScoring:
                     "ms_level",
                 ]
             ]
-            self.spectra_df["charge"] = self.spectra_df["precursor_charge"]
-        except:  # noqa: E722
-            self.spectra_df = f.psm.psm_df.values[
-                ["charge", "peak_start_idx", "peak_stop_idx", "precursor_mz", "spec_idx"]
-            ]
+            self.spectra_df = self.spectra_df[self.spectra_df["ms_level"] == 2]
+
+        except Exception:
+            logger.exception("Failed to extract MS2 spectrum dataframe from f.ms_data.spectrum_df")
+            raise
 
         self.peak_df = f.ms_data.peak_df.values
         self.mode2mass = MOD_TO_AA_TOKEN.copy()

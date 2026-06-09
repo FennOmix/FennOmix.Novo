@@ -123,7 +123,7 @@ class HDFParser:
         try:
             psm_df = f.ms_data.spectrum_df.values[
                 [
-                    "precursor_charge",
+                    "charge",
                     "peak_start_idx",
                     "peak_stop_idx",
                     "precursor_mz",
@@ -131,12 +131,11 @@ class HDFParser:
                     "ms_level",
                 ]
             ]
-            psm_df["charge"] = psm_df["precursor_charge"]
             psm_df = psm_df[psm_df["ms_level"] == 2]
-        except:  # noqa: E722
-            psm_df = f.psm.psm_df.values[
-                ["charge", "peak_start_idx", "peak_stop_idx", "precursor_mz", "spec_idx"]
-            ]
+
+        except Exception:
+            logger.exception("Failed to extract MS2 spectrum dataframe from f.ms_data.spectrum_df")
+            raise
 
         psm_df = psm_df[(psm_df["charge"] > 0) & (psm_df["charge"] <= 5)]
         peak_df = f.ms_data.peak_df.values

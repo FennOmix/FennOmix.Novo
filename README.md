@@ -18,10 +18,10 @@ pip install -e .
 
 ## Input Data
 
-Training and prediction expect folders containing `.hdf5` files.
+Training and prediction expect HDF5 inputs. The current CLI/API entrypoints do not read raw vendor files or mzML directly.
 
-- Training uses annotated HDF5 files with peptide/PSM information.
-- Prediction uses HDF5 files containing spectra and peak tables.
+- Training expects folders containing annotated `.hdf5` files with peptide/PSM information.
+- Prediction expects folders containing `.hdf5` files with spectra and peak tables.
 
 ## Training
 
@@ -39,19 +39,19 @@ foxnovo train \
 ```bash
 foxnovo predict \
   --predict-folder /path/to/predict_hdf5 \
-  --output-folder /path/to/output_csv \
-  --model-weights /path/to/model.ckpt
+  --model-weights /path/to/model.ckpt \
+  --output-folder /path/to/output_csv
 ```
 
 ## Local Smoke Test
 
-This is a local-only check for manual validation before committing. It is not intended for pytest or CI.
+This is a local-only check for manual validation before committing. It is not intended for pytest or CI. Local data and model weights are not included in the repository.
 
 ```bash
 python scripts/local_smoke_predict.py \
-  --predict-folder ./local_data/predict_hdf5 \
+  --predict-folder ./local_data \
   --model-weights ./local_data/model.ckpt \
-  --output-folder ./local_data/smoke_output
+  --output-folder ./local_data
 ```
 
 ## Python API
@@ -71,4 +71,4 @@ Prediction writes one CSV per input HDF5 file. The output columns are:
 
 ## CPU/GPU Note
 
-The runtime selects CPU or GPU from the current configuration. CPU multiprocessing prediction is supported; GPU prediction runs on a single device path.
+GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path.
