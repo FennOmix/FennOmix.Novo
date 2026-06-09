@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from foxnovo.data_set import hdf_dataloader
 from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
-from foxnovo.model.config import Config, Modelconfig
+from foxnovo.model.config import Config, ModelConfig
 from foxnovo.model.foxnovo import FoxNovoNARModel
 from foxnovo.model.scheduler import CosineWarmupScheduler
 from foxnovo.scoring import pGlyco_score
@@ -21,7 +21,7 @@ from foxnovo.scoring import pGlyco_score
 class ModelRunner:
     def __init__(
         self,
-        config: Modelconfig,
+        config: ModelConfig,
         model_filename: None,
     ) -> None:
         self.config = config

@@ -9,7 +9,7 @@ inference from mass spectrometry data.
 from .checkpoint import load_encoder_weight, load_model_weight
 
 # Configuration
-from .config import Config, Modelconfig, get_default_device, seeding
+from .config import Config, ModelConfig, Modelconfig, get_default_device, seeding
 
 # Training & Inference (de novo methodology)
 from .denovo import ModelRunner, predict, train
@@ -29,6 +29,7 @@ __all__ = [
     "predict",
     # Configuration
     "Config",
+    "ModelConfig",
     "Modelconfig",
     "get_default_device",
     "seeding",

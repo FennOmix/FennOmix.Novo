@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from foxnovo.data_set import hdf_dataloader
 from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
-from foxnovo.model.config import Config, Modelconfig, setup_runtime
+from foxnovo.model.config import Config, ModelConfig, setup_runtime
 from foxnovo.model.foxnovo import FoxNovoNARModel
 from foxnovo.model.scheduler import CosineWarmupScheduler
 from foxnovo.model.utils import worker_predict_step
@@ -30,7 +30,7 @@ def setup_multiprocessing(start_method: str = "spawn") -> None:
 class ModelRunner:
     def __init__(
         self,
-        config: Modelconfig,
+        config: ModelConfig,
         model_filename: None,
     ) -> None:
         self.config = config
