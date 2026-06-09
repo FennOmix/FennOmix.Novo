@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import spectrum_utils.spectrum as sus
 import torch
 from alphabase.io.hdf import HDF_File
 from torch.nn.utils.rnn import pad_sequence
@@ -367,36 +366,6 @@ class HDFSpectrumDataset(Dataset):
         except ValueError:
             return np.array([[0.0, 1.0]], dtype=np.float32)
 
-    def _process_peaks_ori(
-        self,
-        mz_array: np.ndarray,
-        int_array: np.ndarray,
-        precursor_mz: float,
-        precursor_charge: int,
-    ) -> torch.Tensor:
-        spectrum = sus.MsmsSpectrum(
-            "",
-            precursor_mz,
-            precursor_charge,
-            mz_array.astype(np.float64),
-            int_array.astype(np.float32),
-        )
-        try:
-            spectrum.set_mz_range(self.min_mz, self.max_mz)
-            if len(spectrum.mz) == 0:
-                raise ValueError
-            spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
-            if len(spectrum.mz) == 0:
-                raise ValueError
-            spectrum.filter_intensity(self.min_intensity, self.n_peaks)
-            if len(spectrum.mz) == 0:
-                raise ValueError
-            spectrum.scale_intensity("root", 1)
-            intensities = spectrum.intensity / np.linalg.norm(spectrum.intensity)
-            return torch.tensor(np.array([spectrum.mz, intensities])).T.float()
-        except ValueError:
-            return torch.tensor([[0, 1]]).float()
-
     def __getitem__(self, idx):
         mz_array, int_array, precursor_mz, precursor_charge, spec_idx = (
             self.dataparser.get_spectrum(idx)
@@ -495,36 +464,6 @@ class AnnotatedHDFSpectrumDataset(Dataset):
 
         except ValueError:
             return np.array([[0.0, 1.0]], dtype=np.float32)
-
-    def _process_peaks_ori(
-        self,
-        mz_array: np.ndarray,
-        int_array: np.ndarray,
-        precursor_mz: float,
-        precursor_charge: int,
-    ) -> torch.Tensor:
-        spectrum = sus.MsmsSpectrum(
-            "",
-            precursor_mz,
-            precursor_charge,
-            mz_array.astype(np.float64),
-            int_array.astype(np.float32),
-        )
-        try:
-            spectrum.set_mz_range(self.min_mz, self.max_mz)
-            if len(spectrum.mz) == 0:
-                raise ValueError
-            spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
-            if len(spectrum.mz) == 0:
-                raise ValueError
-            spectrum.filter_intensity(self.min_intensity, self.n_peaks)
-            if len(spectrum.mz) == 0:
-                raise ValueError
-            spectrum.scale_intensity("root", 1)
-            intensities = spectrum.intensity / np.linalg.norm(spectrum.intensity)
-            return torch.tensor(np.array([spectrum.mz, intensities])).T.float()
-        except ValueError:
-            return torch.tensor([[0, 1]]).float()
 
     def __getitem__(self, idx):
         mz_array, int_array, precursor_mz, precursor_charge, peptide, raw_name, spec_idx, score = (
