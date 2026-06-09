@@ -102,26 +102,9 @@ class Config:
             self.device = torch.device(self.device_str)
         except:  # noqa: E722
             self.device, self.device_str = get_default_device()
-        if self.device_str == "cpu":
-            threads = self.config.cpu_threads
-            torch.set_num_threads(threads)  # max thread of every process
-            with contextlib.suppress(RuntimeError):
-                torch.set_num_interop_threads(1)
-            torch.backends.mkldnn.enabled = True
-            torch.jit.enable_onednn_fusion(True)
-
-            try:
-                torch.backends.cuda.enable_flash_sdp(False)  # CPU不需要这个
-                torch.nn.functional.scaled_dot_product_attention  # SDPA  # noqa: B018
-            except:  # noqa: E722
-                pass
-
-            # 保持开启
-            torch.backends.openmp.enabled = True
-            torch.set_flush_denormal(True)  # 对处理谱图中小数值（denormals）很有帮助
 
 
-def seeding(seed):
+def seed_everything(seed: int) -> None:
     np.random.seed(seed)
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -131,3 +114,26 @@ def seeding(seed):
         torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def seeding(seed: int) -> None:
+    """Backward-compatible alias for seed_everything."""
+    seed_everything(seed)
+
+
+def setup_runtime(config: Config) -> None:
+    if config.device_str == "cpu":
+        threads = config.config.cpu_threads
+        torch.set_num_threads(threads)
+        with contextlib.suppress(RuntimeError):
+            torch.set_num_interop_threads(1)
+        torch.backends.mkldnn.enabled = True
+        torch.jit.enable_onednn_fusion(True)
+        try:
+            torch.backends.cuda.enable_flash_sdp(False)
+            torch.nn.functional.scaled_dot_product_attention  # noqa: B018
+        except:  # noqa: E722
+            pass
+        torch.backends.openmp.enabled = True
+        torch.set_flush_denormal(True)
+    seed_everything(config.config.random_seed)

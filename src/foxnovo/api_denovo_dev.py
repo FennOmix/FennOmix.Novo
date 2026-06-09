@@ -149,8 +149,10 @@ class DeNovoDevAPI:
         if model_save_path:
             logger.info("Model save path: %s", model_save_path)
         logger.info("=" * 70)
+        from foxnovo.model.config import setup_runtime
         from foxnovo.model.denovo import ModelRunner
 
+        setup_runtime(self.config)
         runner = ModelRunner(self.config.config, self.model_weights)  # noqa: F811
         runner.train(train_folder, val_folder)
         logger.info("=" * 70)
@@ -211,8 +213,10 @@ class DeNovoDevAPI:
         logger.info("=" * 70)
         logger.info("Output format: spec_idx, modified_sequence, nar_dp_score, nar_dp_top")
         logger.info("=" * 70)
+        from foxnovo.model.config import setup_runtime
         from foxnovo.model.denovo import ModelRunner
 
+        setup_runtime(self.config)
         runner = ModelRunner(self.config.config, weights_to_use)  # noqa: F811
         logger.info("devices=%s", self.config.config.device)
         runner.predict_batch(predict_folder, output_folder)
