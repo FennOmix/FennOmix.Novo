@@ -17,7 +17,7 @@ def get_default_device():
 
 
 @dataclass
-class Modelconfig:
+class ModelConfig:
     train_scratch: bool = True
     use_weighted_sample: bool = True  # useful for long tail data
     use_chunked_weighted_sample: bool = (
@@ -94,7 +94,7 @@ class Modelconfig:
 class Config:
     device: torch.device | None = None
     device_str: str | None = None
-    config: Modelconfig = field(default_factory=Modelconfig)
+    config: ModelConfig = field(default_factory=ModelConfig)
 
     def __post_init__(self):
         try:
@@ -137,3 +137,6 @@ def setup_runtime(config: Config) -> None:
         torch.backends.openmp.enabled = True
         torch.set_flush_denormal(True)
     seed_everything(config.config.random_seed)
+
+
+Modelconfig = ModelConfig
