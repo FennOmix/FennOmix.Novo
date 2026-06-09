@@ -10,6 +10,7 @@ from alphabase.peptide.precursor import refine_precursor_df
 from peptdeep.mass_spec.match import match_one_raw_with_numba
 
 from foxnovo.constants import WATER_MASS
+from foxnovo.model.config import AA_MASS, MOD_TO_AA_TOKEN
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -22,7 +23,7 @@ def calculate_score_numba(
     frag_stop_idxes,
     ppm,
     gamma,
-    is_b_col,  # bool array of shape (n_frag_types,)
+    is_b_col,
 ):
     n_sequences = len(frag_start_idxes)
     n_frag_types = matched_intensities.shape[1]
@@ -72,7 +73,6 @@ def calculate_score_numba(
         b_ratio = b_count / n_frag if n_frag > 0 else 0.0
         y_ratio = y_count / n_frag if n_frag > 0 else 0.0
 
-        # 最终分数（仍按总匹配比例加权）
         total_score *= matched_ratio**gamma
 
         scores[i] = total_score
@@ -101,27 +101,15 @@ def filter_mass_match(
     sequence_mass_col="modified_sequence mass",
     precursor_mass_col="precursor_mass",
 ):
-    """
-    根据mass_tol（Da偏移）和mass_error（ppm误差）过滤DataFrame，保留满足质量匹配的行
-
-    参数说明：
-        df (pd.DataFrame): 输入的原始DataFrame，需包含序列质量和母离子质量列
-        mass_tol (int): Da水平的偏移容忍度（整数），会生成 [-mass_tol, ..., 0, ..., +mass_tol] 的偏移量
-        mass_error (float): ppm水平的误差容忍度（浮点数），允许的最大ppm误差
-        sequence_mass_col (str): 序列质量列的列名（默认："sequence_mass"）
-        precursor_mass_col (str): 母离子质量列的列名（默认："precursor_mass"）
-
-    返回值：
-        pd.DataFrame: 仅保留质量匹配（mass_match=True）的行，包含原始列和新增的mass_match列
-    """
+    """Keep only rows whose peptide mass matches the precursor within tolerance."""
     df_copy = df.copy(deep=True)
     required_cols = [sequence_mass_col, precursor_mass_col]
     missing_cols = [col for col in required_cols if col not in df_copy.columns]
     if missing_cols:
-        raise ValueError(f"DataFrame缺少必要列：{', '.join(missing_cols)}")
+        raise ValueError(f"DataFrame is missing required columns: {', '.join(missing_cols)}")
     for col in required_cols:
         if not pd.api.types.is_numeric_dtype(df_copy[col]):
-            raise TypeError(f"{col}列必须是数值类型（int/float），当前类型：{df_copy[col].dtype}")
+            raise TypeError(f"Column {col} must be numeric (int/float), got {df_copy[col].dtype}")
     offsets = np.arange(-mass_tol, mass_tol + 1)
     precursor_masses = df_copy[precursor_mass_col].values[:, None]
     shifted_masses = precursor_masses + offsets
@@ -154,46 +142,16 @@ class DenovoSequenceScoring:
             ]
 
         self.peak_df = f.ms_data.peak_df.values
-        self.mode2mass = {
-            "Carbamidomethyl@C": "C+57.021",
-            "Oxidation@M": "M+15.995",
-            "Cysteinyl@C": "C+119.004",
-        }
-        "-------------肽段分子量计算------------"
-        self.aa2mass = {
-            "G": 57.021464,
-            "A": 71.037114,
-            "S": 87.032028,
-            "P": 97.052764,
-            "V": 99.068414,
-            "T": 101.047670,
-            "C+57.021": 160.030649,
-            "L": 113.084064,
-            "I": 113.084064,
-            "C": 103.009649,
-            "N": 114.042927,
-            "D": 115.026943,
-            "Q": 128.058578,
-            "K": 128.094963,
-            "E": 129.042593,
-            "M": 131.040485,
-            "H": 137.058912,
-            "F": 147.068414,
-            "R": 156.101111,
-            "Y": 163.063329,
-            "W": 186.079313,
-            "M+15.995": 147.035400,
-            "C+119.004": 222.014,
-        }
+        self.mode2mass = MOD_TO_AA_TOKEN.copy()
+        self.aa2mass = AA_MASS.copy()
         self.WATER_MW = WATER_MASS
         self.sorted_aas = sorted(self.aa2mass.keys(), key=len, reverse=True)
         self.max_aa_len = max(len(aa) for aa in self.aa2mass)
-        "-------------肽段分子量计算------------"
         self.mass2mod = {}
         for mod, mass_str in self.mode2mass.items():
             for mass in re.findall(r"[+-]\d+\.\d+", mass_str):
                 self.mass2mod[mass] = mod
-        self.top_k = sequences_df.shape[1] - 1  # -1: spec_idx
+        self.top_k = sequences_df.shape[1] - 1
         self.sequences_df = sequences_df
         self.sequences_df["modified_sequence"] = self.sequences_df["modified_sequence"].replace(
             "", np.nan
@@ -202,42 +160,42 @@ class DenovoSequenceScoring:
             drop=True
         )
 
-        self.parse_modified_sequences()  # 拆分修饰序列为sequence、mod、mod_site
+        self.parse_modified_sequences()
         self.mass_tol = 2
         self.ppm = 20.0
 
-    "------分子量计算------"
-
     def calculate_peptide_mw(self, peptide: str) -> float:
-        """计算单个肽段分子量（逻辑简化，直观易懂）"""
+        """Calculate peptide molecular weight from FoxNovo residue tokens."""
         total_mass = 0.0
-        pos = 0  # 当前匹配位置
+        pos = 0
         peptide_len = len(peptide)
 
         while pos < peptide_len:
             matched = False
-            # 从最长缩写开始尝试匹配（避免短缩写覆盖长缩写）
-            # 截取当前位置开始的最长可能子串（不超过max_aa_len）
             max_check_len = min(self.max_aa_len, peptide_len - pos)
 
             for check_len in range(max_check_len, 0, -1):
                 aa_candidate = peptide[pos : pos + check_len]
                 if aa_candidate in self.aa2mass:
                     total_mass += self.aa2mass[aa_candidate]
-                    pos += check_len  # 跳过已匹配的字符
+                    pos += check_len
                     matched = True
                     break
 
             if not matched:
                 raise ValueError(
-                    f"肽段 '{peptide}' 中存在未定义的氨基酸：{peptide[pos:pos + 3]}..."
+                    f"Peptide '{peptide}' contains an undefined residue near "
+                    f"'{peptide[pos:pos + 3]}...'"
                 )
         return total_mass + self.WATER_MW
 
     def add_mw_to_df(
-        self, df: pd.DataFrame, peptide_col: str = "肽段序列", mw_col: str = "肽段分子量"
+        self,
+        df: pd.DataFrame,
+        peptide_col: str = "modified_sequence",
+        mw_col: str = "modified_sequence mass",
     ):
-        """给DataFrame添加分子量列"""
+        """Add a molecular-weight column to a DataFrame."""
         df[mw_col] = df[peptide_col].apply(self.calculate_peptide_mw).round(2).astype(np.float64)
         return df
 
@@ -251,20 +209,8 @@ class DenovoSequenceScoring:
         )
         return df
 
-    "------分子量计算------"
-
     def parse_modified_sequences(self):
-        """
-        处理DataFrame中的修饰序列列，拆分出纯序列、修饰类型和修饰位点
-
-        参数:
-            df: 包含序列的DataFrame
-            seq_col: 序列所在的列名
-            mode2mass: 修饰模式到质量的映射字典
-
-        返回:
-            添加了三列的DataFrame: pure_sequence, mod_types, mod_positions
-        """
+        """Split modified sequences into base sequence, mods, and mod sites."""
 
         def parse_seq(seq):
             pure = []
@@ -300,11 +246,9 @@ class DenovoSequenceScoring:
             how="inner",
         )
         psm_df = refine_precursor_df(self.sequences_df)
-        psm_df["row_idx"] = range(len(psm_df))  # 该函数中，peak_start_idx和df的行索引匹配
+        psm_df["row_idx"] = range(len(psm_df))
         charged_frag_types = ["b_z1", "y_z1", "b_z2", "y_z2"]
-        fragment_mz_df = create_fragment_mz_dataframe(
-            psm_df, charged_frag_types
-        )  # 已核对：随便计算无误
+        fragment_mz_df = create_fragment_mz_dataframe(psm_df, charged_frag_types)
         self.fragment_mz_df = fragment_mz_df
         psm_df["spec_idx"] = psm_df["spec_idx"].astype(np.int64)
         psm_df["frag_start_idx"] = psm_df["frag_start_idx"].astype(np.int64)
@@ -350,25 +294,11 @@ class DenovoSequenceScoring:
         )
 
     def filter_score_and_mass(self):
-        """过滤结果：
-        1. 删除score≈0的行（score < 0.00001）
-        2. 质量匹配过滤（mass_tol/ppm）
-        3. 相同spec_idx保留score最高的行
-        4. 删除冗余列
-        """
+        """Filter low-score rows and drop temporary matching columns."""
         self.filtered_sequences_df = self.sequences_df.copy(deep=True)
         self.filtered_sequences_df = self.filtered_sequences_df[
             self.filtered_sequences_df["score"] >= 0.00001
         ]
-        "mass filter去除，dp_decoder已做"
-        # if not self.filtered_sequences_df.empty:
-        #     self.filtered_sequences_df = filter_mass_match(
-        #         self.filtered_sequences_df,
-        #         mass_tol=self.mass_tol,
-        #         mass_error=self.ppm,
-        #         sequence_mass_col="modified_sequence mass",
-        #         precursor_mass_col="precursor_mass"
-        #     )
         drop_cols = [
             "peak_start_idx",
             "peak_stop_idx",
