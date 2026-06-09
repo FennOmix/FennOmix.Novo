@@ -145,4 +145,5 @@ def setup_runtime(config: Config) -> None:
     seed_everything(config.config.random_seed)
 
 
+# Backward-compatible alias for older imports.
 Modelconfig = ModelConfig
