@@ -16,6 +16,10 @@ Then install the package in editable mode from the repository root:
 pip install -e .
 ```
 
+`pip install -e .` installs the normal runtime dependencies needed for prediction and training.
+
+If you want GPU acceleration, install a CUDA-enabled PyTorch build using the official PyTorch install command for your system before or after the editable install.
+
 ## Input Data
 
 Training and prediction expect HDF5 inputs. The current CLI/API entrypoints do not read raw vendor files or mzML directly.
@@ -71,4 +75,4 @@ Prediction writes one CSV per input HDF5 file. The output columns are:
 
 ## CPU/GPU Note
 
-GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path.
+GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path, but it is slower.
