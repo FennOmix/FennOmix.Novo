@@ -91,7 +91,7 @@ class ModelConfig:
     train_batch_size: int = 64
     eval_batch_size: int = 256  # recommend 64 or 128
     max_epochs: int = 20
-    device: str = "cpu"  # cpu or cuda, if None: try to get cuda
+    device: str = "cuda"  # cpu or cuda, if None: try to get cuda
     cpu_threads: int = 3  # work if using cpu, threads every process, all = m x n
     cpu_process: int = 8  # work if using cpu
 
