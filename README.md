@@ -114,7 +114,23 @@ Prediction writes one CSV per input HDF5 file. The output columns are:
 - `modified_sequence`
 - `nar_dp_score`
 - `nar_dp_top`
+- `sequence`
+- `mods`
+- `mod_sites`
+- `charge`
+- `precursor_mz`
+- `nAA`
+- `modified_sequence mass`
+- `precursor_mass`
+- `score`
+- `matched_ion_count`
+- `matched_ion_ratio`
+- `b_matched_ion_count`
+- `y_matched_ion_count`
+- `b_matched_ion_ratio`
+- `y_matched_ion_ratio`
 
 ## CPU/GPU Note
 
 GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path, but it is slower.
+Inference speed is about 2800+ spectra/s on single RTX 4090 and 190+ spectra/s on AMD EPYC 9554 64-Core Processor platform based on our large-scale benchmark.
