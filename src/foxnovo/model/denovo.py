@@ -12,6 +12,7 @@ import torch.multiprocessing as mp
 from tqdm import tqdm
 
 from foxnovo.data_set import hdf_dataloader
+from foxnovo.io.prediction_inputs import prepare_prediction_hdf_files
 from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
 from foxnovo.model.config import Config, ModelConfig, setup_runtime
 from foxnovo.model.foxnovo import FoxNovoNARModel
@@ -209,23 +210,33 @@ class ModelRunner:
         scored_results = self._score_predictions(raw_results, hdf5_path)
         return scored_results
 
-    def predict_batch(self, folder: str, output_folder: str | None = None):
-        """
-        input: folder path with hdf5 files
-        output: for each hdf5 file, one csv file with peak_ion_match_score
-        """
+    def predict_files(self, hdf5_files: list[str | Path], output_folder: str | None = None):
         if self.device.type == "cpu" and self.config.cpu_process > 1:
             setup_multiprocessing()
         self.initialize_model(mode="predict")
-        folder_path = Path(folder)
-        hdf5_files = sorted(folder_path.glob("*.hdf5"))
-        for file_path in hdf5_files:
+        for file_path in [Path(path) for path in hdf5_files]:
             logger.info("Processing file: %s", file_path.name)
             df = self.predict_one_file(str(file_path))
             if output_folder:
                 out_dir = Path(output_folder)
                 out_dir.mkdir(parents=True, exist_ok=True)
                 df.to_csv(out_dir / f"{file_path.stem}_result.csv", index=False)
+        return
+
+    def predict_batch(
+        self,
+        folder: str,
+        output_folder: str | None = None,
+        data_format: str = "hdf5",
+    ):
+        """
+        input: folder path with hdf5 files
+        output: for each hdf5 file, one csv file with peak_ion_match_score
+        """
+        if output_folder is None:
+            raise ValueError("output_folder must be provided for batch prediction.")
+        hdf5_files = prepare_prediction_hdf_files(folder, output_folder, data_format=data_format)
+        self.predict_files(hdf5_files, output_folder=output_folder)
         return
 
     def _predict_single_device(self, loader):
@@ -418,13 +429,14 @@ def predict(
     predict_folder: str,
     model: str | None,
     output_folder: str,
+    data_format: str = "hdf5",
 ) -> None:
     mconfig = Config()
     setup_runtime(mconfig)
     config = mconfig.config
     runner = ModelRunner(config, model)
     logger.info("Predicting model from:\n %s", predict_folder)
-    runner.predict_batch(predict_folder, output_folder)
+    runner.predict_batch(predict_folder, output_folder, data_format=data_format)
     logger.info("Predicting Done")
 
 

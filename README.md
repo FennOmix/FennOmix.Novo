@@ -1,6 +1,6 @@
 # FennOmix.Novo (FoxNovo)
 
-`foxnovo` provides training and batch prediction for de novo peptide sequencing from HDF5-based MS/MS data.
+`foxnovo` provides training and prediction for de novo peptide sequencing from HDF5-based MS/MS data, with optional one-step conversion from MGF, mzML, and Thermo RAW inputs at prediction time.
 
 ## Installation
 
@@ -22,10 +22,11 @@ If you want GPU acceleration, install a CUDA-enabled PyTorch build using the off
 
 ## Input Data
 
-Training and prediction expect HDF5 inputs. The current CLI/API entrypoints do not read raw vendor files or mzML directly.
+Training expects HDF5 inputs. Prediction defaults to HDF5-only behavior unless you explicitly set `--data-format`.
 
 - Training expects folders containing annotated `.hdf5` files with peptide/PSM information.
-- Prediction expects folders containing `.hdf5` files with spectra and peak tables.
+- Prediction without `--data-format` expects existing `.hdf` / `.hdf5` inputs.
+- Prediction can also convert `.mgf`, `.mzML`, or Thermo `.raw` inputs when `--data-format` is set explicitly.
 
 ## Training
 
@@ -46,6 +47,47 @@ foxnovo predict \
   --model-weights /path/to/model.ckpt \
   --output-folder /path/to/output_csv
 ```
+
+Single HDF file prediction also works:
+
+```bash
+foxnovo predict \
+  --predict-folder /path/to/sample.hdf5 \
+  --model-weights /path/to/model.ckpt \
+  --output-folder /path/to/output_csv
+```
+
+Explicit MGF conversion and prediction:
+
+```bash
+foxnovo predict \
+  --predict-folder /path/to/predict_mgf \
+  --data-format mgf \
+  --model-weights /path/to/model.ckpt \
+  --output-folder /path/to/output_csv
+```
+
+Explicit mzML conversion and prediction:
+
+```bash
+foxnovo predict \
+  --predict-folder /path/to/predict_mzml \
+  --data-format mzml \
+  --model-weights /path/to/model.ckpt \
+  --output-folder /path/to/output_csv
+```
+
+Explicit Thermo RAW conversion and prediction:
+
+```bash
+foxnovo predict \
+  --predict-folder /path/to/predict_raw \
+  --data-format raw \
+  --model-weights /path/to/model.ckpt \
+  --output-folder /path/to/output_csv
+```
+
+When conversion is needed, FoxNovo writes cached HDF files under `<output_folder>/_foxnovo_hdf_cache/`. Thermo RAW support depends on AlphaRaw and its Python/.NET reader support in your local environment.
 
 ## Local Smoke Test
 

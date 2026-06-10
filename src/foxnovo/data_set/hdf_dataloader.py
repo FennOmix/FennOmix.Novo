@@ -121,7 +121,10 @@ class HDFParser:
     def load_data(self):
         f = HDF_File(file_name=self.hdf5_path, read_only=True)
         try:
-            psm_df = f.ms_data.spectrum_df.values[
+            spectrum_df = f.ms_data.spectrum_df.values
+            if "charge" not in spectrum_df.columns and "precursor_charge" in spectrum_df.columns:
+                spectrum_df["charge"] = spectrum_df["precursor_charge"]
+            psm_df = spectrum_df[
                 [
                     "charge",
                     "peak_start_idx",

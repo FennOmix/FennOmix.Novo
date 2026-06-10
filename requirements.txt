@@ -1,4 +1,5 @@
 alphabase>=1.8.0
+alpharaw
 einops>=0.8.0
 h5py>=3.10.0
 matplotlib>=3.8.0
