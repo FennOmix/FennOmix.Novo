@@ -7,7 +7,7 @@ name = "foxnovo"
 version = "0.1.0"
 description = "FoxNovo Python Package"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 authors = [
     {name = "FennOmix"}
 ]
