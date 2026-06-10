@@ -165,6 +165,7 @@ class DeNovoDevAPI:
         predict_folder: str,
         output_folder: str,
         model_weights: str | None = None,
+        data_format: str = "hdf5",
     ) -> None:
         """
             Run prediction on MS/MS spectra using the DeNovo Dev model.
@@ -174,10 +175,11 @@ class DeNovoDevAPI:
             - Top-10 DP predictions
             - Filtered results based on scoring
             Args:
-                predict_folder (str): Path to folder containing HDF5 files for prediction.
+                predict_folder (str): Path to a prediction HDF file/folder, or raw/mzML/MGF input.
                 output_folder (str): Path where to save prediction results as CSV files.
                 model_weights (Optional[str]): Path to model weights to use for prediction.
                     If None, uses weights provided during initialization.
+                data_format (str): Input format. Default: "hdf5".
             Returns:
                 None
             Raises:
@@ -212,6 +214,7 @@ class DeNovoDevAPI:
         logger.info("Prediction folder: %s", predict_folder)
         logger.info("Output folder: %s", output_folder)
         logger.info("Model weights: %s", weights_to_use)
+        logger.info("Input data format: %s", data_format)
         logger.info("=" * 70)
         logger.info("Output format: spec_idx, modified_sequence, nar_dp_score, nar_dp_top")
         logger.info("=" * 70)
@@ -221,7 +224,7 @@ class DeNovoDevAPI:
         setup_runtime(self.config)
         runner = ModelRunner(self.config.config, weights_to_use)  # noqa: F811
         logger.info("devices=%s", self.config.config.device)
-        runner.predict_batch(predict_folder, output_folder)
+        runner.predict_batch(predict_folder, output_folder, data_format=data_format)
         logger.info("=" * 70)
         logger.info("PREDICTION COMPLETED SUCCESSFULLY")
         logger.info("=" * 70)
@@ -252,6 +255,7 @@ def predict(
     predict_folder: str,
     output_folder: str,
     model_weights: str,
+    data_format: str = "hdf5",
 ) -> None:
     """
     Quick function to run prediction without creating an API instance.
@@ -268,13 +272,13 @@ def predict(
         ... )
     """
     api = DeNovoDevAPI(model_weights=model_weights)
-    api.predict(predict_folder, output_folder)
+    api.predict(predict_folder, output_folder, data_format=data_format)
 
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
-        prog="foxnovo_dev",
+        prog="foxnovo",
         description="FoxNovo Dev - DeNovo Peptide Sequencing Model (Development)",
         epilog="For more information, visit the project repository.",
     )
@@ -356,7 +360,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--predict-folder",
         required=True,
         type=str,
-        help="Path to folder containing HDF5 files for prediction",
+        help="Path to a prediction file/folder; defaults to existing HDF inputs unless --data-format is set",
     )
     predict_parser.add_argument(
         "--output-folder",
@@ -366,6 +370,13 @@ def create_parser() -> argparse.ArgumentParser:
     )
     predict_parser.add_argument(
         "--model-weights", required=True, type=str, help="Path to model weights for prediction"
+    )
+    predict_parser.add_argument(
+        "--data-format",
+        type=str,
+        default="hdf5",
+        choices=["hdf5", "hdf", "raw", "mzml", "mgf", "auto"],
+        help="Prediction input format (default: hdf5)",
     )
     return parser
 
@@ -401,6 +412,7 @@ def cli_predict(args: argparse.Namespace) -> int:
         api.predict(
             predict_folder=args.predict_folder,
             output_folder=args.output_folder,
+            data_format=args.data_format,
         )
         return 0
     except FileNotFoundError as e:
