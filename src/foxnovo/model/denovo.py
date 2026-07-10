@@ -1,10 +1,8 @@
 import logging
-import os
 import queue
 import time
 from pathlib import Path
 
-import neptune
 import numpy as np
 import pandas as pd
 import torch
@@ -51,14 +49,6 @@ class ModelRunner:
         if not self.config.model_save_path:
             raise ValueError("config.model_save_path must be provided for training.")
         self.initialize_model()
-        run = neptune.init_run(
-            project="FennOmix/FeNNetNovo",
-            tags=["Task0_baseline"],
-            dependencies="infer",
-            api_token=os.getenv("NEPTUNE_API_TOKEN"),
-            monitoring_namespace="monitoring",
-            mode="offline",
-        )
 
         self.loaders = hdf_dataloader.DeNovoDataModule(
             train_folder=train_folder,
@@ -93,9 +83,6 @@ class ModelRunner:
                     x.to(self.device) if isinstance(x, torch.Tensor) else x for x in batch
                 )  # spectra, precursors, peptides, raw_names, spec_idx, score
                 loss, peptide_recall = self.model.training_step(batch, mode="train")
-                run["train/step_loss"].log(loss)
-                run["train/step_pep_top1_recall"].log(peptide_recall)
-                run["train/lr"].log(self.optimizer.param_groups[0]["lr"])
                 loss.backward()
 
                 self.optimizer.step()
@@ -149,13 +136,6 @@ class ModelRunner:
                 top1_val_peptide_recall,
                 val_dp_recall,
             )
-            run["train/epoch_loss"].log(epoch_loss)
-            run["val/epoch_loss"].log(val_loss)
-            run["val/epoch_pep_top1_recall"].log(top1_val_peptide_recall)
-            run["train_eval_loss"].log(train_eval_loss)
-            run["train_eval_recall"].log(train_eval_recall)
-            run["train_eval/dp_top10_recall"].log(train_eval_dp_recall)
-            run["val/dp_top10_recall"].log(val_dp_recall)
 
     def validate(self, valid_loader):
         self.model.eval()

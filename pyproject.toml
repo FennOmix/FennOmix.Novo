@@ -31,7 +31,6 @@ dependencies = [
     "spectrum_utils",
     "alphabase",
     "alpharaw",
-    "neptune",
     "peptdeep",
 ]
 
@@ -52,7 +51,6 @@ ml = [
     "numba",
     "spectrum_utils",
     "alphabase",
-    "neptune",
     "peptdeep",
 ]
 
@@ -62,7 +60,6 @@ ml-cpu = [
     "numba",
     "spectrum_utils",
     "alphabase",
-    "neptune",
     "peptdeep",
 ]
 
