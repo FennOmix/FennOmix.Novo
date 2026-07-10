@@ -20,9 +20,8 @@ class WeightedCrossEntropyLoss(nn.Module):
             ignore_index: pad id.
             label_smoothing: label smoothing param passed to F.cross_entropy.
             use_weighted_score: whether to enable score-based weighting.
-            score_mean, score_std: 全局（dataset-level）score均值与标准差。若 use_weighted_score=True，**必须提供**。
-            weight_min, weight_max: 最终权重映射区间 [weight_min, weight_max]。
-            eps: 防止除零。
+            score_mean, score_std: dataset-level mean score and std, when use_weighted_score=True.
+            weight_min, weight_max: [weight_min, weight_max].
         """
         super().__init__()
         self.ignore_index = ignore_index
@@ -52,7 +51,6 @@ class WeightedCrossEntropyLoss(nn.Module):
             reduction="none",
         )
         if self.use_weighted_score and score is not None:
-            # z-score归一化
             device = pred.device
             B = batch_size
             L = truth.numel() // B
@@ -61,13 +59,11 @@ class WeightedCrossEntropyLoss(nn.Module):
             mask = (truth_2d != self.ignore_index).float()
             valid_counts = mask.sum(dim=1).clamp(min=1.0)
 
-            # 每个样本的平均loss
             sample_loss = loss_per_token.sum(dim=1) / valid_counts
 
-            # 全局 z-score + sigmod映射
             z = (torch.tensor(score, device=device) - self.score_mean) / (self.score_std + self.eps)
             s = torch.sigmoid(z)
-            weights = self.weight_min + s * (self.weight_max - self.weight_min)  # (B,)
+            weights = self.weight_min + s * (self.weight_max - self.weight_min)
 
             loss = (sample_loss * weights).mean()
         else:
