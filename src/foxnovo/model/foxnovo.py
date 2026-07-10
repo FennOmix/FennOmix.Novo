@@ -154,7 +154,7 @@ class FoxNovoNARModel(torch.nn.Module):
             The token for each amino acid in the peptide sequence.
         """
         if not isinstance(sequence, str):
-            return sequence  # Assume it is already tokenized.
+            return sequence
         sequence = sequence.replace("I", "L")
         sequence = re.split(r"(?<=.)(?=[A-Z])", sequence)
 
@@ -179,10 +179,10 @@ class FoxNovoNARModel(torch.nn.Module):
             precursors=precursors, memory=memories, memory_key_padding_mask=mem_masks
         )
 
-        tokens = [self.tokenize(s) for s in sequences]  # list of Tensors
+        tokens = [self.tokenize(s) for s in sequences]
         tokens = [
             F.pad(token, (0, self.max_length + 1 - len(token)), value=0) for token in tokens
-        ]  # padding至15：14 + '$'
+        ]
         tokens = torch.stack(tokens)
         return (logits, tokens.to(logits.device), raw_name, spec_idx, batch_score)
 
@@ -232,9 +232,8 @@ class FoxNovoNARModel(torch.nn.Module):
         dp_top10_recall = 0.0
         if mode in ["eval", "val"]:
             truth_sequences = []
-            for seq in batch[2]:  # batch[2]是peptide序列
+            for seq in batch[2]:
                 if isinstance(seq, str):
-                    # 统一预处理：去空、去终止符
                     clean_seq = seq.strip().rstrip("$")
                     truth_sequences.append(clean_seq)
                 else:
@@ -244,7 +243,6 @@ class FoxNovoNARModel(torch.nn.Module):
         "loss"
         B = pred.shape[0]
         vocab_size = self.decoder.num_classes
-        # batch_size = pred.shape[0]
 
         pred = pred.reshape(-1, vocab_size + 1)
         truth = truth.flatten()
@@ -256,6 +254,6 @@ class FoxNovoNARModel(torch.nn.Module):
             loss = self.val_celoss(pred, truth)
 
         if mode == "train":
-            return loss, peptide_recall  # training: return 2 metrics
+            return loss, peptide_recall
         else:
-            return loss, peptide_recall, dp_top10_recall  # eval, val: return 3 metrics
+            return loss, peptide_recall, dp_top10_recall
