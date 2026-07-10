@@ -42,7 +42,7 @@ class PeptideNARDecoder(nn.Module):
         )
 
         self.transformer_decoder = torch.nn.TransformerDecoder(layer, num_layers=n_layers)
-        self.final = torch.nn.Linear(dim_model, num_classes + 1)  # +1 for PAD
+        self.final = torch.nn.Linear(dim_model, num_classes + 1)
 
     @property
     def device(self) -> torch.device:
@@ -68,7 +68,7 @@ class PeptideNARDecoder(nn.Module):
         masses = self.mass_encoder(precursors[:, None, 0])
         charges = self.charge_encoder(precursors[:, 1].int() - 1)
         precursors = masses + charges[:, None, :]
-        tgt = precursors.repeat(1, self.max_length + 1, 1)  # [B, L, D]
+        tgt = precursors.repeat(1, self.max_length + 1, 1)
         tgt_key_padding_mask = tgt.sum(axis=2) == 0
         tgt = self.pos_encoder(tgt)
 
@@ -79,5 +79,5 @@ class PeptideNARDecoder(nn.Module):
             tgt_key_padding_mask=tgt_key_padding_mask,
             memory_key_padding_mask=memory_key_padding_mask,
         )
-        logits = self.final(dec_out)  # [B, L ,num_classes+1]
+        logits = self.final(dec_out)
         return logits
