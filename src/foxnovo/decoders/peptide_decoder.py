@@ -68,7 +68,6 @@ class PeptideNARDecoder(nn.Module):
         masses = self.mass_encoder(precursors[:, None, 0])
         charges = self.charge_encoder(precursors[:, 1].int() - 1)
         precursors = masses + charges[:, None, :]
-        # precursors = charges[:, None, :]  # remove precursor mass, may be useful for tims tof daa
         tgt = precursors.repeat(1, self.max_length + 1, 1)  # [B, L, D]
         tgt_key_padding_mask = tgt.sum(axis=2) == 0
         tgt = self.pos_encoder(tgt)
