@@ -53,27 +53,7 @@ def filter_ignore_mods(psm_df, mods_column, ignore_mod):
     return filtered_df, deleted_count
 
 
-# def alpha_raw_reader(file_path, file_type):
-#     "简单的多类型原始数据MS2加载器"
-#     if file_type == 'hdf5':
-#         f = HDF_File(file_name=file_path, read_only=True)
-#         spectrum_df = f.psm.psm_df.values
-#         peak_df = f.ms_data.peak_df.values
-#     elif file_type == 'raw':
-#         raw_data = ThermoRawData()
-#         raw_data.import_raw(file_path)
-#         spectrum_df = raw_data.spectrum_df
-#         spectrum_df.rename(columns={'precursor_charge': 'charge'}, inplace=True)
-#         peak_df = raw_data.peak_df
-#     elif file_type == 'mzml':
-#         mzml_reader = ms_reader_provider.get_reader("mzml")
-#         mzml_reader.import_raw(file_path)
-#         spectrum_df = mzml_reader.spectrum_df
-#         spectrum_df.rename(columns={'precursor_charge': 'charge'}, inplace=True)
-#         peak_df = mzml_reader.peak_df
-#     else:
-#         print('Unknow raw data type, please make sure your raw data is Thermo raw/hdf5/mzml!')
-#     return spectrum_df, peak_df
+
 
 
 def build_mod_seq(sequences, mods_list, sites_list, mod_dict):
@@ -572,7 +552,7 @@ class DeNovoDataModule:
         max_mz: float = 2500,
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
-        n_workers: int | None = 0,  # win 0, linux 16
+        n_workers: int | None = 0,
         random_state: int | None = 454,
         annotated=True,
         eval_subset_ratio: float = 0.1,
