@@ -54,11 +54,11 @@ def get_default_device():
 @dataclass
 class ModelConfig:
     train_scratch: bool = True
-    use_weighted_sample: bool = True  # useful for long tail data
+    use_weighted_sample: bool = True  # useful for long tail data in training
     use_chunked_weighted_sample: bool = (
-        False  # Set as True when dataset size large than 1800w, and set use_weighted_sample=False
+        False  # Set as True when dataset size large than 1800w, and set use_weighted_sample=False in training
     )
-    use_weighted_score: bool = True  # useful for low quality data
+    use_weighted_score: bool = True  # may useful for low quality data in training
     score_mean: float = 2.16
     score_std: float = 0.75
     weight_min: float = 0.5
@@ -155,5 +155,4 @@ def setup_runtime(config: Config) -> None:
     seed_everything(config.config.random_seed)
 
 
-# Backward-compatible alias for older imports.
 Modelconfig = ModelConfig
