@@ -70,7 +70,5 @@ def worker_predict_step(input_queue, output_queue, model, device):
                 break
 
             batch = tuple(x.to(device) if isinstance(x, torch.Tensor) else x for x in batch)
-
-            # 这里 model 100% 不是 None！
             result = model.predict_step(batch)
             output_queue.put(result)
