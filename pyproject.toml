@@ -28,7 +28,6 @@ dependencies = [
     "torch",
     "einops",
     "numba",
-    "spectrum_utils",
     "alphabase",
     "alpharaw",
     "peptdeep",
@@ -49,7 +48,6 @@ ml = [
     "torch",
     "einops",
     "numba",
-    "spectrum_utils",
     "alphabase",
     "peptdeep",
 ]
@@ -58,7 +56,6 @@ ml-cpu = [
     "torch",
     "einops",
     "numba",
-    "spectrum_utils",
     "alphabase",
     "peptdeep",
 ]
