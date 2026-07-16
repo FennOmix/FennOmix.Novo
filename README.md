@@ -4,19 +4,13 @@
 
 ## Installation
 
-Install the local runtime dependencies first:
-
-```bash
-pip install -r requirements.txt
-```
-
-Then install the package in editable mode from the repository root:
+Install the package in editable mode from the repository root:
 
 ```bash
 pip install -e .
 ```
 
-`pip install -e .` installs the normal runtime dependencies needed for prediction and training.
+This installs the package along with all runtime dependencies needed for prediction and training.
 
 If you want GPU acceleration, install a CUDA-enabled PyTorch build using the official PyTorch install command for your system before or after the editable install.
 
@@ -87,7 +81,7 @@ foxnovo predict \
   --output-folder /path/to/output_csv
 ```
 
-When conversion is needed, FoxNovo writes cached HDF files under `<output_folder>/_foxnovo_hdf_cache/`. Thermo RAW support depends on AlphaRaw and its Python/.NET reader support in your local environment.
+When conversion is needed, FoxNovo writes cached HDF files under `<output_folder>/_foxnovo_hdf_cache/`. Thermo RAW support depends on AlphaRaw and its Python/.NET reader support in your local envi[...]
 
 ## Local Smoke Test
 
