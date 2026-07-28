@@ -58,7 +58,7 @@ class ModelConfig:
     use_chunked_weighted_sample: bool = (
         False  # Set as True when dataset size large than 1800w, and set use_weighted_sample=False in training
     )
-    use_weighted_score: bool = True  # may useful for low quality data in training
+    use_weighted_score: bool = False  # may useful for low quality data in training,set as True if need
     score_mean: float = 2.16
     score_std: float = 0.75
     weight_min: float = 0.5
@@ -92,7 +92,7 @@ class ModelConfig:
     learning_rate: float = 0.0001
     weight_decay: float = 1e-5
     train_batch_size: int = 64
-    eval_batch_size: int = 256  # recommend 64 or 128
+    eval_batch_size: int = 256
     max_epochs: int = 20
     device: str = field(
         default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu"
