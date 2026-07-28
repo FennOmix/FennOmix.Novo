@@ -1,12 +1,23 @@
 # FennOmix.Novo (FoxNovo)
 
+FoxNovo is a deep learning and combinatorial framework for accurate and scalable de novo sequencing of HLA-I immunopeptides from tandem mass spectra.
+
+FoxNovo integrates a dual-token m/z representation, a non-autoregressive transformer architecture, and dynamic programming-based precursor-mass constrained decoding for high-confidence peptide sequencing.
+
 `foxnovo` provides training and prediction for de novo peptide sequencing from HDF5-based MS/MS data, with optional one-step conversion from MGF, mzML, and Thermo RAW inputs at prediction time.
 
 ## Installation
 
 Install the package in editable mode from the repository root:
+## Installation
+
+### Create a conda environment
+
+FoxNovo requires Python 3.11. We recommend installing FoxNovo in a dedicated conda environment:
 
 ```bash
+conda create -n foxnovo_env python=3.11
+conda activate foxnovo_env
 pip install -e .
 ```
 
@@ -24,7 +35,7 @@ Training expects HDF5 inputs. Prediction defaults to HDF5-only behavior unless y
 
 ## Training
 
-`model_save_path` is required for training.
+Training functionality is provided for users who want to train or fine-tune FoxNovo models on custom datasets.
 
 ```bash
 foxnovo train \
@@ -83,16 +94,6 @@ foxnovo predict \
 
 When conversion is needed, FoxNovo writes cached HDF files under `<output_folder>/_foxnovo_hdf_cache/`. Thermo RAW support depends on AlphaRaw and its Python/.NET reader support in your local envi[...]
 
-## Local Smoke Test
-
-This is a local-only check for manual validation before committing. It is not intended for pytest or CI. Local data and model weights are not included in the repository.
-
-```bash
-python scripts/local_smoke_predict.py \
-  --predict-folder ./local_data \
-  --model-weights ./local_data/model.ckpt \
-  --output-folder ./local_data
-```
 
 ## Python API
 
@@ -102,6 +103,7 @@ from foxnovo.api import predict, train
 
 ## Output
 
+The output CSV contains predicted peptide sequences, precursor information, decoding scores and fragment-ion matching statistics.
 Prediction writes one CSV per input HDF5 file. The output columns are:
 
 - `spec_idx`
@@ -127,4 +129,8 @@ Prediction writes one CSV per input HDF5 file. The output columns are:
 ## CPU/GPU Note
 
 GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path, but it is slower.
-Inference speed is about 2800+ spectra/s on single RTX 4090 and 190+ spectra/s on AMD EPYC 9554 64-Core Processor platform based on our large-scale benchmark.
+Performance depends on hardware and input data characteristics. Inference speed is about 2800+ spectra/s on single RTX 4090 and 190+ spectra/s on AMD EPYC 9554 64-Core Processor platform based on our large-scale benchmark.
+
+## License
+
+[MIT/Apache-2.0/etc.]
