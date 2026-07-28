@@ -8,9 +8,6 @@ FoxNovo integrates a dual-token m/z representation, a non-autoregressive transfo
 
 ## Installation
 
-Install the package in editable mode from the repository root:
-## Installation
-
 ### Create a conda environment
 
 FoxNovo requires Python 3.11. We recommend installing FoxNovo in a dedicated conda environment:
@@ -21,7 +18,7 @@ conda activate foxnovo_env
 pip install -e .
 ```
 
-This installs the package along with all runtime dependencies needed for prediction and training.
+This installs the package along with all runtime dependencies needed for prediction and training. Installation usually takes less than 10 minutes, excluding CUDA-enabled PyTorch installation.
 
 If you want GPU acceleration, install a CUDA-enabled PyTorch build using the official PyTorch install command for your system before or after the editable install.
 
@@ -133,4 +130,4 @@ Performance depends on hardware and input data characteristics. Inference speed 
 
 ## License
 
-[Apache-2.0]
+This project is released under the Apache License 2.0.
