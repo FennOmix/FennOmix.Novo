@@ -133,4 +133,4 @@ Performance depends on hardware and input data characteristics. Inference speed 
 
 ## License
 
-[MIT/Apache-2.0/etc.]
+[Apache-2.0]
