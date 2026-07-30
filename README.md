@@ -41,7 +41,6 @@ Training functionality is provided for users who want to train or fine-tune FoxN
 
 ```bash
 foxnovo train \
-  --config config.yaml \
   --train-folder /path/to/train_hdf5 \
   --val-folder /path/to/val_hdf5 \
   --model-save-path /path/to/output/model.ckpt
@@ -51,7 +50,6 @@ foxnovo train \
 
 ```bash
 foxnovo predict \
-  --config config.yaml \
   --predict-folder /path/to/predict_hdf5 \
   --model-weights /path/to/model.ckpt \
   --output-folder /path/to/output_csv
@@ -61,7 +59,6 @@ Single HDF file prediction also works:
 
 ```bash
 foxnovo predict \
-  --config config.yaml \
   --predict-folder /path/to/sample.hdf5 \
   --model-weights /path/to/model.ckpt \
   --output-folder /path/to/output_csv
@@ -101,7 +98,7 @@ When conversion is needed, FoxNovo writes cached HDF files under `<output_folder
 
 ## Configuration
 
-FoxNovo includes an editable YAML configuration template at `config.yaml`. CLI arguments override overlapping YAML values when they are provided.
+FoxNovo includes an editable YAML configuration template at `config.yaml`. The `--config` option is optional; when it is omitted, FoxNovo uses the built-in defaults from `ModelConfig`. CLI arguments override overlapping YAML values when they are provided.
 
 ```bash
 foxnovo train --config config.yaml --train-folder /path/to/train_hdf5 --val-folder /path/to/val_hdf5 --model-save-path /path/to/model.ckpt

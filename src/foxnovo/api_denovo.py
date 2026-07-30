@@ -59,7 +59,8 @@ class DeNovoAPI:
         Args:
             model_weights (Optional[str]): Path to pre-trained model weights.
                 If None, will initialize model from scratch or use default config.
-            config_path (Optional[str]): Path to a YAML config file.
+            config_path (Optional[str]): Path to a YAML config file. If None,
+                built-in ModelConfig defaults are used.
         Examples:
             >>> # Initialize with default configuration
             >>> api = DeNovoAPI()
@@ -323,7 +324,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--config",
         type=str,
         default=None,
-        help="Path to YAML config file (optional)",
+        help="Optional YAML config file; uses built-in defaults when omitted",
     )
     train_parser.add_argument(
         "--model-save-path", type=str, default=None, help="Path to save the trained model"
@@ -395,7 +396,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--config",
         type=str,
         default=None,
-        help="Path to YAML config file (optional)",
+        help="Optional YAML config file; uses built-in defaults when omitted",
     )
     predict_parser.add_argument(
         "--data-format",
