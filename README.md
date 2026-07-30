@@ -15,12 +15,29 @@ FoxNovo requires Python 3.11. We recommend installing FoxNovo in a dedicated con
 ```bash
 conda create -n foxnovo_env python=3.11
 conda activate foxnovo_env
+```
+
+We recommend running FoxNovo on a GPU. Install PyTorch first using the command that matches your CUDA environment. To check your CUDA version:
+
+```bash
+nvidia-smi
+```
+
+Then choose the corresponding PyTorch command from the official selector: https://pytorch.org/get-started/locally/
+
+Example for a CUDA 12.1 PyTorch build:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
+
+Then install FoxNovo:
+
+```bash
 pip install -e .
 ```
 
-This installs the package along with all runtime dependencies needed for prediction and training. Installation usually takes less than 10 minutes, excluding CUDA-enabled PyTorch installation.
-
-If you want GPU acceleration, install a CUDA-enabled PyTorch build using the official PyTorch install command for your system before or after the editable install.
+`pip install -e .` installs FoxNovo and its non-PyTorch runtime dependencies. PyTorch is intentionally not installed automatically because CPU/CUDA wheels depend on the user's local environment.
 
 ## Input Data
 
@@ -171,10 +188,10 @@ For each MS2 spectrum, multiple candidate peptide sequences may be generated usi
    After mass filtering, select the candidate with the smallest `nar_dp_top` value as the most reliable prediction for each MS2 spectrum.
 
 3. **Score and match-ion based filtering using `score` and `matched_ion_ratio`**
-   
+
    Based on our evaluation, a score cutoff of **30** provides a reliable and balance quality threshold.
    Higher fragment-ion matching ratios indicate stronger agreement between the predicted peptide sequence and the experimental MS/MS spectrum. Therefore, `matched_ion_ratio` can be used for more stringent quality control.
-   
+
 ## CPU/GPU Note
 
 GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path, but it is slower.
