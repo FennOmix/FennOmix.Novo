@@ -30,7 +30,8 @@ Training expects HDF5 inputs. Prediction defaults to HDF5-only behavior unless y
 - Prediction without `--data-format` expects existing `.hdf` / `.hdf5` inputs.
 - Prediction can also convert `.mgf`, `.mzML`, or Thermo `.raw` inputs when `--data-format` is set explicitly.
 
-##Model Checkpoint
+## Model Checkpoint
+
 The pretrained model checkpoint specific for HLA-I immunopeptides is available here:
 [FoxNovo_HLAI_v1.0.ckpt](https://drive.google.com/file/d/1qsWbAUUT1FXr8qAIpgkTJS2hBDr-0fCP/view?usp=drive_link)
 
