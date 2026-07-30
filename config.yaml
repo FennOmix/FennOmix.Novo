@@ -1,0 +1,42 @@
+# FoxNovo runtime configuration.
+# Omitted fields use defaults from foxnovo.model.config.ModelConfig.
+
+# Runtime
+device: cuda
+cpu_threads: 3
+cpu_process: 8
+
+# Data preprocessing
+n_peaks: 150
+min_mz: 50.0
+max_mz: 2500
+min_intensity: 0.01
+remove_precursor_tol: 2.0
+max_charge: 10
+
+# Model
+dim_model: 512
+n_head: 8
+dim_feedforward: 1024
+n_layers: 9
+dropout: 0.1
+min_length: 8
+max_length: 14
+top_k: 10
+top_k_output: 10
+precursor_mass_tol: 2
+precursor_mass_ppm: 20
+fragment_mass_ppm: 20
+
+# Training
+train_scratch: true
+use_weighted_sample: true
+use_chunked_weighted_sample: false
+use_weighted_score: false
+model_save_path: ""
+learning_rate: 0.0001
+weight_decay: 0.00001
+train_batch_size: 64
+eval_batch_size: 256
+max_epochs: 20
+random_seed: 454

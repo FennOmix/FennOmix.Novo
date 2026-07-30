@@ -32,13 +32,13 @@ class DeNovoAPI:
     This class provides simplified interfaces for:
     - Training the model on new data
     - Making predictions on MS/MS spectra
-    
+
     Features:
     - Weighted sampling for long-tail data handling
     - Weighted scoring for low-quality spectrum handling
     - Dual decoder system (Non-Autoregressive + Dynamic Programming)
     - Improved mass tolerance handling (Da and ppm)
-    
+
     Examples:
         >>> from foxnovo.api import train
         >>> train(
@@ -53,12 +53,13 @@ class DeNovoAPI:
         ... )
     """
 
-    def __init__(self, model_weights: str | None = None):
+    def __init__(self, model_weights: str | None = None, config_path: str | None = None):
         """
         Initialize the DeNovo API.
         Args:
             model_weights (Optional[str]): Path to pre-trained model weights.
                 If None, will initialize model from scratch or use default config.
+            config_path (Optional[str]): Path to a YAML config file.
         Examples:
             >>> # Initialize with default configuration
             >>> api = DeNovoAPI()
@@ -68,22 +69,22 @@ class DeNovoAPI:
             ... )
         """
         self.model_weights = model_weights
-        from foxnovo.model.config import Config
+        from foxnovo.model.config import load_config
 
-        self.config = Config()
+        self.config = load_config(config_path)
         self.runner = None
 
-    def train(
+    def train(  # noqa: C901
         self,
         train_folder: str,
         val_folder: str,
         model_save_path: str | None = None,
-        batch_size: int = 64,
-        max_epochs: int = 20,
-        learning_rate: float = 0.0001,
-        train_scratch: bool = True,
-        use_weighted_sample: bool = True,
-        use_weighted_score: bool = True,
+        batch_size: int | None = None,
+        max_epochs: int | None = None,
+        learning_rate: float | None = None,
+        train_scratch: bool | None = None,
+        use_weighted_sample: bool | None = None,
+        use_weighted_score: bool | None = None,
         **kwargs,
     ) -> None:
         """
@@ -123,12 +124,18 @@ class DeNovoAPI:
         if not val_path.exists():
             raise FileNotFoundError(f"Validation folder not found: {val_folder}")
         # Update configuration
-        self.config.config.train_batch_size = batch_size
-        self.config.config.max_epochs = max_epochs
-        self.config.config.learning_rate = learning_rate
-        self.config.config.train_scratch = train_scratch
-        self.config.config.use_weighted_sample = use_weighted_sample
-        self.config.config.use_weighted_score = use_weighted_score
+        if batch_size is not None:
+            self.config.config.train_batch_size = batch_size
+        if max_epochs is not None:
+            self.config.config.max_epochs = max_epochs
+        if learning_rate is not None:
+            self.config.config.learning_rate = learning_rate
+        if train_scratch is not None:
+            self.config.config.train_scratch = train_scratch
+        if use_weighted_sample is not None:
+            self.config.config.use_weighted_sample = use_weighted_sample
+        if use_weighted_score is not None:
+            self.config.config.use_weighted_score = use_weighted_score
         if model_save_path:
             self.config.config.model_save_path = model_save_path
         # Update with any additional kwargs
@@ -143,12 +150,12 @@ class DeNovoAPI:
         logger.info("=" * 70)
         logger.info("Training folder: %s", train_folder)
         logger.info("Validation folder: %s", val_folder)
-        logger.info("Batch size: %s", batch_size)
-        logger.info("Max epochs: %s", max_epochs)
-        logger.info("Learning rate: %s", learning_rate)
-        logger.info("Train from scratch: %s", train_scratch)
-        logger.info("Use weighted sampling: %s", use_weighted_sample)
-        logger.info("Use weighted scoring: %s", use_weighted_score)
+        logger.info("Batch size: %s", self.config.config.train_batch_size)
+        logger.info("Max epochs: %s", self.config.config.max_epochs)
+        logger.info("Learning rate: %s", self.config.config.learning_rate)
+        logger.info("Train from scratch: %s", self.config.config.train_scratch)
+        logger.info("Use weighted sampling: %s", self.config.config.use_weighted_sample)
+        logger.info("Use weighted scoring: %s", self.config.config.use_weighted_score)
         if model_save_path:
             logger.info("Model save path: %s", model_save_path)
         logger.info("=" * 70)
@@ -233,7 +240,13 @@ class DeNovoAPI:
 
 
 # Convenience functions for quick usage
-def train(train_folder: str, val_folder: str, model_weights: str | None = None, **kwargs) -> None:
+def train(
+    train_folder: str,
+    val_folder: str,
+    model_weights: str | None = None,
+    config_path: str | None = None,
+    **kwargs,
+) -> None:
     """
     Quick function to train the model without creating an API instance.
     Args:
@@ -249,7 +262,7 @@ def train(train_folder: str, val_folder: str, model_weights: str | None = None, 
         ...     model_save_path="/models/my_model.ckpt",
         ... )
     """
-    api = DeNovoAPI(model_weights=model_weights)
+    api = DeNovoAPI(model_weights=model_weights, config_path=config_path)
     api.train(train_folder, val_folder, **kwargs)
 
 
@@ -258,6 +271,7 @@ def predict(
     output_folder: str,
     model_weights: str,
     data_format: str = "hdf5",
+    config_path: str | None = None,
 ) -> None:
     """
     Quick function to run prediction without creating an API instance.
@@ -273,7 +287,7 @@ def predict(
         ...     model_weights="/models/trained_model.ckpt",
         ... )
     """
-    api = DeNovoAPI(model_weights=model_weights)
+    api = DeNovoAPI(model_weights=model_weights, config_path=config_path)
     api.predict(predict_folder, output_folder, data_format=data_format)
 
 
@@ -306,25 +320,29 @@ def create_parser() -> argparse.ArgumentParser:
         help="Path to pre-trained model weights (optional)",
     )
     train_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to YAML config file (optional)",
+    )
+    train_parser.add_argument(
         "--model-save-path", type=str, default=None, help="Path to save the trained model"
     )
+    train_parser.add_argument("--batch-size", type=int, default=None, help="Training batch size")
     train_parser.add_argument(
-        "--batch-size", type=int, default=64, help="Training batch size (default: 64)"
-    )
-    train_parser.add_argument(
-        "--max-epochs", type=int, default=20, help="Maximum number of epochs (default: 20)"
+        "--max-epochs", type=int, default=None, help="Maximum number of epochs"
     )
     train_parser.add_argument(
         "--learning-rate",
         type=float,
-        default=0.0001,
-        help="Initial learning rate (default: 0.0001)",
+        default=None,
+        help="Initial learning rate",
     )
     train_parser.add_argument(
         "--train-scratch",
         action="store_true",
-        default=True,
-        help="Train from scratch instead of fine-tuning (default: True)",
+        default=None,
+        help="Train from scratch instead of fine-tuning",
     )
     train_parser.add_argument(
         "--no-train-scratch",
@@ -335,8 +353,8 @@ def create_parser() -> argparse.ArgumentParser:
     train_parser.add_argument(
         "--use-weighted-sample",
         action="store_true",
-        default=True,
-        help="Use weighted sampling for long-tail data (default: True)",
+        default=None,
+        help="Use weighted sampling for long-tail data",
     )
     train_parser.add_argument(
         "--no-weighted-sample",
@@ -347,8 +365,8 @@ def create_parser() -> argparse.ArgumentParser:
     train_parser.add_argument(
         "--use-weighted-score",
         action="store_true",
-        default=True,
-        help="Use weighted scoring for low-quality spectra (default: True)",
+        default=None,
+        help="Use weighted scoring for low-quality spectra",
     )
     train_parser.add_argument(
         "--no-weighted-score",
@@ -374,6 +392,12 @@ def create_parser() -> argparse.ArgumentParser:
         "--model-weights", required=True, type=str, help="Path to model weights for prediction"
     )
     predict_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to YAML config file (optional)",
+    )
+    predict_parser.add_argument(
         "--data-format",
         type=str,
         default="hdf5",
@@ -386,7 +410,7 @@ def create_parser() -> argparse.ArgumentParser:
 def cli_train(args: argparse.Namespace) -> int:
     """Handle the train command."""
     try:
-        api = DeNovoAPI(model_weights=args.model_weights)
+        api = DeNovoAPI(model_weights=args.model_weights, config_path=args.config)
         api.train(
             train_folder=args.train_folder,
             val_folder=args.val_folder,
@@ -410,7 +434,7 @@ def cli_train(args: argparse.Namespace) -> int:
 def cli_predict(args: argparse.Namespace) -> int:
     """Handle the predict command."""
     try:
-        api = DeNovoAPI(model_weights=args.model_weights)
+        api = DeNovoAPI(model_weights=args.model_weights, config_path=args.config)
         api.predict(
             predict_folder=args.predict_folder,
             output_folder=args.output_folder,

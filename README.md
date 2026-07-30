@@ -41,6 +41,7 @@ Training functionality is provided for users who want to train or fine-tune FoxN
 
 ```bash
 foxnovo train \
+  --config config.yaml \
   --train-folder /path/to/train_hdf5 \
   --val-folder /path/to/val_hdf5 \
   --model-save-path /path/to/output/model.ckpt
@@ -50,6 +51,7 @@ foxnovo train \
 
 ```bash
 foxnovo predict \
+  --config config.yaml \
   --predict-folder /path/to/predict_hdf5 \
   --model-weights /path/to/model.ckpt \
   --output-folder /path/to/output_csv
@@ -59,6 +61,7 @@ Single HDF file prediction also works:
 
 ```bash
 foxnovo predict \
+  --config config.yaml \
   --predict-folder /path/to/sample.hdf5 \
   --model-weights /path/to/model.ckpt \
   --output-folder /path/to/output_csv
@@ -94,13 +97,43 @@ foxnovo predict \
   --output-folder /path/to/output_csv
 ```
 
-When conversion is needed, FoxNovo writes cached HDF files under `<output_folder>/_foxnovo_hdf_cache/`. Thermo RAW support depends on AlphaRaw and its Python/.NET reader support in your local envi[...]
+When conversion is needed, FoxNovo writes cached HDF files under `<output_folder>/_foxnovo_hdf_cache/`. Thermo RAW support depends on AlphaRaw and its Python/.NET reader support in your local environment.
 
+## Configuration
+
+FoxNovo includes an editable YAML configuration template at `config.yaml`. CLI arguments override overlapping YAML values when they are provided.
+
+```bash
+foxnovo train --config config.yaml --train-folder /path/to/train_hdf5 --val-folder /path/to/val_hdf5 --model-save-path /path/to/model.ckpt
+foxnovo predict --config config.yaml --predict-folder /path/to/predict_hdf5 --model-weights /path/to/model.ckpt --output-folder /path/to/output_csv
+```
+
+## Test
+
+The repository includes a small MGF example at `tests/test_data/test.mgf`. After downloading a model checkpoint, you can run a quick prediction test with:
+
+```bash
+foxnovo predict \
+  --predict-folder tests/test_data/test.mgf \
+  --data-format mgf \
+  --model-weights /path/to/FoxNovo_HLAI_v1.0.ckpt \
+  --output-folder tests/test_output
+```
+
+This command converts the MGF file to a temporary prediction HDF under `tests/test_output/_foxnovo_hdf_cache/` and writes the prediction CSV to `tests/test_output/`.
 
 ## Python API
 
 ```python
 from foxnovo.api import predict, train
+
+train(train_folder="/path/to/train_hdf5", val_folder="/path/to/val_hdf5", config_path="config.yaml")
+predict(
+    predict_folder="/path/to/predict_hdf5",
+    output_folder="/path/to/output_csv",
+    model_weights="/path/to/model.ckpt",
+    config_path="config.yaml",
+)
 ```
 
 ## Output

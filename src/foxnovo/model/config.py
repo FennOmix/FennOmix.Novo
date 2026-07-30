@@ -3,6 +3,8 @@ import logging
 import os
 import random
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -55,10 +57,10 @@ def get_default_device():
 class ModelConfig:
     train_scratch: bool = True
     use_weighted_sample: bool = True  # useful for long tail data in training
-    use_chunked_weighted_sample: bool = (
-        False  # Set as True when dataset size large than 1800w, and set use_weighted_sample=False in training
+    use_chunked_weighted_sample: bool = False  # Set as True when dataset size large than 1800w, and set use_weighted_sample=False in training
+    use_weighted_score: bool = (
+        False  # may useful for low quality data in training,set as True if need
     )
-    use_weighted_score: bool = False  # may useful for low quality data in training,set as True if need
     score_mean: float = 2.16
     score_std: float = 0.75
     weight_min: float = 0.5
@@ -118,6 +120,52 @@ class Config:
         except:  # noqa: E722
             self.device, self.device_str = get_default_device()
             self.config.device = self.device_str
+
+    @classmethod
+    def from_yaml(cls, config_path: str | Path) -> "Config":
+        return cls(config=load_model_config(config_path))
+
+
+def _read_yaml_config(config_path: str | Path) -> dict[str, Any]:
+    try:
+        import yaml
+    except ImportError as exc:
+        raise ImportError(
+            "PyYAML is required to load config.yaml. Install package dependency 'pyyaml'."
+        ) from exc
+
+    path = Path(config_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Config file must contain a YAML mapping: {path}")
+    return data
+
+
+def _extract_model_config_values(data: dict[str, Any]) -> dict[str, Any]:
+    for key in ("model_config", "config"):
+        value = data.get(key)
+        if isinstance(value, dict):
+            return value
+    return data
+
+
+def load_model_config(config_path: str | Path | None = None) -> ModelConfig:
+    if config_path is None:
+        return ModelConfig()
+
+    values = _extract_model_config_values(_read_yaml_config(config_path))
+    valid_fields = set(ModelConfig.__dataclass_fields__)
+    unknown = sorted(set(values) - valid_fields)
+    if unknown:
+        raise ValueError(f"Unknown ModelConfig field(s) in {config_path}: {', '.join(unknown)}")
+    return ModelConfig(**values)
+
+
+def load_config(config_path: str | Path | None = None) -> Config:
+    return Config(config=load_model_config(config_path))
 
 
 def seed_everything(seed: int) -> None:

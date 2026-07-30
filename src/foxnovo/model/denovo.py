@@ -12,7 +12,7 @@ from tqdm import tqdm
 from foxnovo.data_set import hdf_dataloader
 from foxnovo.io.prediction_inputs import prepare_prediction_hdf_files
 from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
-from foxnovo.model.config import Config, ModelConfig, setup_runtime
+from foxnovo.model.config import ModelConfig, load_config, setup_runtime
 from foxnovo.model.foxnovo import FoxNovoNARModel
 from foxnovo.model.scheduler import CosineWarmupScheduler
 from foxnovo.model.utils import worker_predict_step
@@ -394,8 +394,9 @@ def train(
     train_folder: str,
     val_folder: str,
     model: str | None,
+    config_path: str | None = None,
 ) -> None:
-    mconfig = Config()
+    mconfig = load_config(config_path)
     setup_runtime(mconfig)
     config = mconfig.config
     runner = ModelRunner(config, model)
@@ -410,8 +411,9 @@ def predict(
     model: str | None,
     output_folder: str,
     data_format: str = "hdf5",
+    config_path: str | None = None,
 ) -> None:
-    mconfig = Config()
+    mconfig = load_config(config_path)
     setup_runtime(mconfig)
     config = mconfig.config
     runner = ModelRunner(config, model)
