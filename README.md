@@ -158,6 +158,23 @@ Prediction writes one CSV per input HDF5 file. The output columns are:
 - `b_matched_ion_ratio`
 - `y_matched_ion_ratio`
 
+### Recommended peptide selection and quality control
+
+For each MS2 spectrum, multiple candidate peptide sequences may be generated using DP-decoder. We recommend the following filtering strategy:
+
+1. **Precursor mass filtering**
+
+   First, filter candidate sequences based on precursor mass consistency. Candidates with incompatible peptide mass and precursor mass should be removed.
+
+2. **Select the highest-ranked candidate using `nar_dp_top`**
+
+   After mass filtering, select the candidate with the smallest `nar_dp_top` value as the most reliable prediction for each MS2 spectrum.
+
+3. **Score and match-ion based filtering using `score` and `matched_ion_ratio`**
+   
+   Based on our evaluation, a score cutoff of **30** provides a reliable and balance quality threshold.
+   Higher fragment-ion matching ratios indicate stronger agreement between the predicted peptide sequence and the experimental MS/MS spectrum. Therefore, `matched_ion_ratio` can be used for more stringent quality control.
+   
 ## CPU/GPU Note
 
 GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path, but it is slower.
