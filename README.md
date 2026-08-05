@@ -211,8 +211,8 @@ In our large-scale benchmark using HDF5 files in the native input format expecte
 
 ## Citation
 
-> **Accurate and ultra-fast de novo HLA-I immunopeptide sequencing with FoxNovo.**
-> Chen, Z.-X., You, C.-R., Tarn, C., Zhou, X.-X., & Zeng, W.-F. (2026). *LangTaoSha Preprint Server*.
+> **Accurate and ultra-fast de novo HLA-I immunopeptide sequencing with FoxNovo.**  
+> Chen, Z.-X., You, C.-R., Tarn, C., Zhou, X.-X., & Zeng, W.-F. (2026). *LangTaoSha Preprint Server*.  
 > doi: [https://doi.org/10.65215/LTSpreprints.2026.08.02.000299](https://doi.org/10.65215/LTSpreprints.2026.08.02.000299)
 
 
