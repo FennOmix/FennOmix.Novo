@@ -55,7 +55,6 @@ def get_default_device():
 
 @dataclass
 class ModelConfig:
-    train_scratch: bool = True
     use_weighted_sample: bool = True  # useful for long tail data in training
     use_chunked_weighted_sample: bool = False  # Set as True when dataset size large than 1800w, and set use_weighted_sample=False in training
     use_weighted_score: bool = (

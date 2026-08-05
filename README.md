@@ -55,11 +55,22 @@ The pretrained model checkpoint specific for HLA-I immunopeptides is available h
 ## Training
 
 Training functionality is provided for users who want to train or fine-tune FoxNovo models on custom datasets.
+If `--model-weights` is provided, FoxNovo loads the full checkpoint and fine-tunes all model parameters. If it is omitted, training starts from scratch.
 
 ```bash
 foxnovo train \
   --train-folder /path/to/train_hdf5 \
   --val-folder /path/to/val_hdf5 \
+  --model-save-path /path/to/output/model.ckpt
+```
+
+Fine-tune from a pretrained checkpoint:
+
+```bash
+foxnovo train \
+  --train-folder /path/to/train_hdf5 \
+  --val-folder /path/to/val_hdf5 \
+  --model-weights /path/to/FoxNovo_HLAI_v1.0.ckpt \
   --model-save-path /path/to/output/model.ckpt
 ```
 

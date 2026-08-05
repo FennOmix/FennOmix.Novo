@@ -29,7 +29,6 @@ precursor_mass_ppm: 20
 fragment_mass_ppm: 20
 
 # Training
-train_scratch: true
 use_weighted_sample: true
 use_chunked_weighted_sample: false
 use_weighted_score: false

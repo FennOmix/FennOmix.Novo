@@ -75,7 +75,7 @@ def load_model_weight(new_model: FoxNovoNARModel, pretrained_path: str) -> None:
 
     missing_keys, unexpected_keys = new_model.load_state_dict(state, strict=False)
 
-    logger.info("Loaded encoder weights from %s", pretrained_path)
+    logger.info("Loaded model weights from %s", pretrained_path)
 
     critical_keys = [
         "encoder.tokenizer_encoder.int_mz_embedding.weight",

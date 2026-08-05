@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from foxnovo.data_set import hdf_dataloader
 from foxnovo.io.prediction_inputs import prepare_prediction_hdf_files
-from foxnovo.model.checkpoint import load_encoder_weight, load_model_weight
+from foxnovo.model.checkpoint import load_model_weight
 from foxnovo.model.config import ModelConfig, load_config, setup_runtime
 from foxnovo.model.foxnovo import FoxNovoNARModel
 from foxnovo.model.scheduler import CosineWarmupScheduler
@@ -354,30 +354,21 @@ class ModelRunner:
                 self.model.share_memory()
                 self.model.eval()
         else:
-            if not self.config.train_scratch:
-                self.model = load_encoder_weight(self.model, self.model_filename)
-                self.optimizer = torch.optim.AdamW(
-                    self.model.parameters(),
-                    lr=self.config.learning_rate,
-                    weight_decay=self.config.weight_decay,
-                )
-                self.lr_scheduler = CosineWarmupScheduler(
-                    self.optimizer,
-                    self.config.warmup_iters,
-                    self.config.cosine_schedule_period_iters,
-                )
+            if self.model_filename:
+                logger.info("Fine-tuning from checkpoint: %s", self.model_filename)
+                self.model = load_model_weight(self.model, self.model_filename)
             else:
                 logger.info("Training from scratch...")
-                self.optimizer = torch.optim.AdamW(
-                    self.model.parameters(),
-                    lr=self.config.learning_rate,
-                    weight_decay=self.config.weight_decay,
-                )
-                self.lr_scheduler = CosineWarmupScheduler(
-                    self.optimizer,
-                    self.config.warmup_iters,
-                    self.config.cosine_schedule_period_iters,
-                )
+            self.optimizer = torch.optim.AdamW(
+                self.model.parameters(),
+                lr=self.config.learning_rate,
+                weight_decay=self.config.weight_decay,
+            )
+            self.lr_scheduler = CosineWarmupScheduler(
+                self.optimizer,
+                self.config.warmup_iters,
+                self.config.cosine_schedule_period_iters,
+            )
 
     def _score_predictions(self, raw_results: list, hdf5_path: str) -> pd.DataFrame:
         """model_predicted_results -> scored_results"""

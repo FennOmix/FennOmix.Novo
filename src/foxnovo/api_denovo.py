@@ -83,7 +83,6 @@ class DeNovoAPI:
         batch_size: int | None = None,
         max_epochs: int | None = None,
         learning_rate: float | None = None,
-        train_scratch: bool | None = None,
         use_weighted_sample: bool | None = None,
         use_weighted_score: bool | None = None,
         **kwargs,
@@ -98,7 +97,6 @@ class DeNovoAPI:
                 batch_size (int): Training batch size. Default: 64.
                 max_epochs (int): Maximum number of epochs to train. Default: 20.
                 learning_rate (float): Initial learning rate. Default: 0.0001.
-                train_scratch (bool): Train from scratch or fine-tune pre-trained encoder. Default: True.
                 use_weighted_sample (bool): Use weighted sampling for long-tail data. Default: True.
                 use_weighted_score (bool): Use weighted scoring for low-quality spectra. Default: True.
                 **kwargs: Additional keyword arguments for model configuration.
@@ -131,8 +129,6 @@ class DeNovoAPI:
             self.config.config.max_epochs = max_epochs
         if learning_rate is not None:
             self.config.config.learning_rate = learning_rate
-        if train_scratch is not None:
-            self.config.config.train_scratch = train_scratch
         if use_weighted_sample is not None:
             self.config.config.use_weighted_sample = use_weighted_sample
         if use_weighted_score is not None:
@@ -154,7 +150,10 @@ class DeNovoAPI:
         logger.info("Batch size: %s", self.config.config.train_batch_size)
         logger.info("Max epochs: %s", self.config.config.max_epochs)
         logger.info("Learning rate: %s", self.config.config.learning_rate)
-        logger.info("Train from scratch: %s", self.config.config.train_scratch)
+        logger.info(
+            "Training initialization: %s",
+            "fine-tune full checkpoint" if self.model_weights else "from scratch",
+        )
         logger.info("Use weighted sampling: %s", self.config.config.use_weighted_sample)
         logger.info("Use weighted scoring: %s", self.config.config.use_weighted_score)
         if model_save_path:
@@ -318,7 +317,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--model-weights",
         type=str,
         default=None,
-        help="Path to pre-trained model weights (optional)",
+        help="Optional full checkpoint for fine-tuning; omitted means train from scratch",
     )
     train_parser.add_argument(
         "--config",
@@ -338,18 +337,6 @@ def create_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Initial learning rate",
-    )
-    train_parser.add_argument(
-        "--train-scratch",
-        action="store_true",
-        default=None,
-        help="Train from scratch instead of fine-tuning",
-    )
-    train_parser.add_argument(
-        "--no-train-scratch",
-        dest="train_scratch",
-        action="store_false",
-        help="Fine-tune pre-trained encoder instead of training from scratch",
     )
     train_parser.add_argument(
         "--use-weighted-sample",
@@ -419,7 +406,6 @@ def cli_train(args: argparse.Namespace) -> int:
             batch_size=args.batch_size,
             max_epochs=args.max_epochs,
             learning_rate=args.learning_rate,
-            train_scratch=args.train_scratch,
             use_weighted_sample=args.use_weighted_sample,
             use_weighted_score=args.use_weighted_score,
         )
@@ -475,20 +461,18 @@ if __name__ == "__main__":
     # ======================== CLI USAGE ========================
     # Uncomment to test as CLI:
     #
-    # Train (from scratch):
+    # Train from scratch:
     #   foxnovo train \\
     #       --train-folder /path/to/train \\
     #       --val-folder /path/to/val \\
     #       --batch-size 64 \\
-    #       --max-epochs 20 \\
-    #       --train-scratch
+    #       --max-epochs 20
     #
-    # Train (fine-tune):
+    # Fine-tune a full checkpoint:
     #   foxnovo train \\
     #       --train-folder /path/to/train \\
     #       --val-folder /path/to/val \\
-    #       --model-weights /path/to/pretrained.ckpt \\
-    #       --no-train-scratch
+    #       --model-weights /path/to/pretrained.ckpt
     #
     # Predict:
     #   foxnovo predict \\
