@@ -10,7 +10,10 @@ import torch.multiprocessing as mp
 from tqdm import tqdm
 
 from foxnovo.data_set import hdf_dataloader
-from foxnovo.io.prediction_inputs import prepare_prediction_hdf_files
+from foxnovo.io.prediction_inputs import (
+    collect_prediction_source_files,
+    prepare_single_prediction_hdf,
+)
 from foxnovo.model.checkpoint import load_model_weight
 from foxnovo.model.config import ModelConfig, load_config, setup_runtime
 from foxnovo.model.foxnovo import FoxNovoNARModel
@@ -190,17 +193,46 @@ class ModelRunner:
         scored_results = self._score_predictions(raw_results, hdf5_path)
         return scored_results
 
-    def predict_files(self, hdf5_files: list[str | Path], output_folder: str | None = None):
+    def predict_files(
+        self,
+        input_files: list[str | Path],
+        output_folder: str | None = None,
+        data_format: str = "hdf5",
+    ):
+        if output_folder is None:
+            raise ValueError("output_folder must be provided for prediction.")
         if self.device.type == "cpu" and self.config.cpu_process > 1:
             setup_multiprocessing()
         self.initialize_model(mode="predict")
-        for file_path in [Path(path) for path in hdf5_files]:
-            logger.info("Processing file: %s", file_path.name)
-            df = self.predict_one_file(str(file_path))
-            if output_folder:
-                out_dir = Path(output_folder)
-                out_dir.mkdir(parents=True, exist_ok=True)
-                df.to_csv(out_dir / f"{file_path.stem}_result.csv", index=False)
+        success_count = 0
+        source_files = [Path(path) for path in input_files]
+        total_files = len(source_files)
+
+        for file_index, source_file in enumerate(source_files, start=1):
+            try:
+                logger.info(
+                    "Preparing prediction input %s/%s: %s",
+                    file_index,
+                    total_files,
+                    source_file,
+                )
+                hdf5_path = prepare_single_prediction_hdf(
+                    source_file,
+                    output_folder,
+                    data_format=data_format,
+                )
+                logger.info("Processing file %s/%s: %s", file_index, total_files, hdf5_path.name)
+                df = self.predict_one_file(str(hdf5_path))
+                if output_folder:
+                    out_dir = Path(output_folder)
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    df.to_csv(out_dir / f"{hdf5_path.stem}_result.csv", index=False)
+                success_count += 1
+            except Exception as exc:
+                logger.exception("Skipping prediction input %s due to error: %s", source_file, exc)
+
+        if success_count == 0:
+            raise RuntimeError("No prediction input files completed successfully.")
         return
 
     def predict_batch(
@@ -215,8 +247,9 @@ class ModelRunner:
         """
         if output_folder is None:
             raise ValueError("output_folder must be provided for batch prediction.")
-        hdf5_files = prepare_prediction_hdf_files(folder, output_folder, data_format=data_format)
-        self.predict_files(hdf5_files, output_folder=output_folder)
+        input_files = collect_prediction_source_files(folder, data_format=data_format)
+        logger.info("Found %s prediction input files.", len(input_files))
+        self.predict_files(input_files, output_folder=output_folder, data_format=data_format)
         return
 
     def _predict_single_device(self, loader):

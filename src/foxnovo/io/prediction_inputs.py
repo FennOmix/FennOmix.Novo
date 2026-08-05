@@ -595,6 +595,41 @@ def convert_to_prediction_hdf(
     return output_hdf
 
 
+def collect_prediction_source_files(
+    predict_path: str | Path,
+    data_format: str = "hdf5",
+) -> list[Path]:
+    """Collect candidate prediction inputs without opening or converting them."""
+    normalized_format = normalize_data_format(data_format)
+    return _collect_files_from_path(Path(predict_path), normalized_format)
+
+
+def prepare_single_prediction_hdf(
+    input_file: str | Path,
+    output_folder: str | Path,
+    data_format: str = "hdf5",
+) -> Path:
+    """Validate or convert one prediction input into an HDF file."""
+    normalized_format = normalize_data_format(data_format)
+    input_file = Path(input_file)
+    output_folder = Path(output_folder)
+
+    source_format = (
+        _infer_format_from_suffix(input_file) if normalized_format == "auto" else normalized_format
+    )
+
+    if source_format == "hdf5":
+        return validate_prediction_hdf(input_file)
+
+    cache_dir = output_folder / "_foxnovo_hdf_cache"
+    cached_hdf = cache_dir / f"{input_file.name}.hdf"
+    return convert_to_prediction_hdf(
+        input_file=input_file,
+        output_hdf=cached_hdf,
+        data_format=source_format,
+    )
+
+
 def prepare_prediction_hdf_files(
     predict_path: str | Path,
     output_folder: str | Path,
@@ -613,37 +648,16 @@ def prepare_prediction_hdf_files(
         data_format='mgf'  -> convert .mgf files to cached HDF first
         data_format='auto' -> infer supported formats from file suffixes
     """
-    normalized_format = normalize_data_format(data_format)
-
-    predict_path = Path(predict_path)
-    output_folder = Path(output_folder)
-
-    source_files = _collect_files_from_path(predict_path, normalized_format)
+    source_files = collect_prediction_source_files(predict_path, data_format)
 
     prepared_files: list[Path] = []
-    cache_dir = output_folder / "_foxnovo_hdf_cache"
 
     for source_file in source_files:
-        source_format = (
-            _infer_format_from_suffix(source_file)
-            if normalized_format == "auto"
-            else normalized_format
-        )
-
-        if source_format == "hdf5":
-            prepared_files.append(validate_prediction_hdf(source_file))
-            continue
-
-        cached_hdf = cache_dir / f"{source_file.name}.hdf"
         prepared_files.append(
-            convert_to_prediction_hdf(
-                input_file=source_file,
-                output_hdf=cached_hdf,
-                data_format=source_format,
-            )
+            prepare_single_prediction_hdf(source_file, output_folder, data_format)
         )
 
     if not prepared_files:
-        raise ValueError(f"No prediction-ready HDF files were prepared from: {predict_path}")
+        raise ValueError(f"No prediction-ready HDF files were prepared from: {Path(predict_path)}")
 
     return prepared_files
