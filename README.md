@@ -206,7 +206,7 @@ For each MS2 spectrum, multiple candidate peptide sequences may be generated usi
 ## CPU/GPU Note
 
 GPU is recommended for normal model use. CPU prediction is supported, including the current multiprocessing prediction path, but it is slower.
-Performance depends on hardware and input data characteristics. Inference speed is about 2800+ spectra/s on single RTX 4090 and 190+ spectra/s on AMD EPYC 9554 64-Core Processor platform based on our large-scale benchmark.
+In our large-scale benchmark using HDF5 files in the native input format expected FoxNovo, inference throughput exceeded 2,800 spectra/s on a single NVIDIA RTX 4090 and 190 spectra/s on an AMD EPYC 9554 64-Core Processor platform.
 
 ## License
 
