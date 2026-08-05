@@ -209,6 +209,13 @@ GPU is recommended for normal model use. CPU prediction is supported, including 
 
 In our large-scale benchmark using HDF5 files in the native input format expected by FoxNovo, inference throughput exceeded ~2,800 spectra/s on a single NVIDIA RTX 4090 and 200 spectra/s on an AMD EPYC 9554 64-Core Processor platform.
 
+## Citation
+
+> **Accurate and ultra-fast de novo HLA-I immunopeptide sequencing with FoxNovo.**
+> Chen, Z.-X., You, C.-R., Tarn, C., Zhou, X.-X., & Zeng, W.-F. (2026). *LangTaoSha Preprint Server*.
+> doi: [https://doi.org/10.65215/LTSpreprints.2026.08.02.000299](https://doi.org/10.65215/LTSpreprints.2026.08.02.000299)
+
+
 ## License
 
 This project is released under the Apache License 2.0.
