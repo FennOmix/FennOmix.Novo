@@ -50,7 +50,7 @@ Training expects HDF5 inputs. Prediction defaults to HDF5-only behavior unless y
 ## Model Checkpoint
 
 The pretrained model checkpoint specific for HLA-I immunopeptides is available here:
-[FoxNovo_HLAI_v1.0.ckpt](https://drive.google.com/file/d/1qsWbAUUT1FXr8qAIpgkTJS2hBDr-0fCP/view?usp=drive_link)
+[FoxNovo_HLAI_v1.0.ckpt](https://fennomix.lab.westlake.edu.cn/register/)
 
 ## Training
 
@@ -211,8 +211,8 @@ In our large-scale benchmark using HDF5 files in the native input format expecte
 
 ## Citation
 
-> **Accurate and ultra-fast de novo HLA-I immunopeptide sequencing with FoxNovo.**  
-> Chen, Z.-X., You, C.-R., Tarn, C., Zhou, X.-X., & Zeng, W.-F. (2026). *LangTaoSha Preprint Server*.  
+> **Accurate and ultra-fast de novo HLA-I immunopeptide sequencing with FoxNovo.**
+> Chen, Z.-X., You, C.-R., Tarn, C., Zhou, X.-X., & Zeng, W.-F. (2026). *LangTaoSha Preprint Server*.
 > doi: [https://doi.org/10.65215/LTSpreprints.2026.08.02.000299](https://doi.org/10.65215/LTSpreprints.2026.08.02.000299)
 
 
