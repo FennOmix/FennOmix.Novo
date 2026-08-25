@@ -50,6 +50,7 @@ Training expects HDF5 inputs. Prediction defaults to HDF5-only behavior unless y
 ## Model Checkpoint
 
 The pretrained model checkpoint for HLA-I immunopeptides is freely available upon request. Please apply for access using the link below. The request information is used solely for usage and demand statistics.
+
 [Apply for access to FoxNovo_HLAI_v1.0.ckpt](https://fennomix.lab.westlake.edu.cn/register/)
 
 ## Training
